@@ -1,10 +1,17 @@
 # Donna
 
+🕶️ Meet Donna: The Background Design Review Agent
+
+Most AI coding assistants are just execution engines. For all Suits fans, they are the legal secretaries of the software world—they type exactly what you dictate, even if you are dictating a mistake.
+Donna is different. She isn’t the assistant you hire to type; she’s the partner you need to stay ahead.
+While your primary coding agent is hyper-focused on hammering out syntax and shipping immediate features, Donna operates in the background. She reads between the lines, analyzes your broader architecture, conducts silent design reviews, and stops you from walking into technical debt traps.
+
+So how exactly does Donna do this? 
 A VS Code extension that runs **in parallel to your coding agent** and assesses
 the system-wide impact of its change **before you open a pull request**.
 
 The coding agent writes the code. Donna does the background investigation
-you would otherwise do by hand afterwards: which services and dependencies the
+you would otherwise do manually afterwards: which services and dependencies the
 change reaches, which documented design decisions it conflicts with, whether it
 is backward compatible, what could go wrong in production, which tests apply,
 and who needs to review it.
