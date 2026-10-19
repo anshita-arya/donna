@@ -1,0 +1,37 @@
+{
+  "id": "01-contract-required-field",
+  "title": "Add a routing_policy field to the chat completion request",
+  "agentPrompt": "Our gateway needs to know which routing policy to use per request. Add a routing_policy field to the chat completion request model so callers can specify it.",
+
+  "whyItLooksFine": "One added line on a dataclass. No logic changed, no test broken — the existing contract test suite passes, because every assertion in it is about the fields that were already there. A reviewer skimming the diff sees an additive change to a request model, which is the single most common and most routinely-approved kind of API change.",
+
+  "whatIsActuallyWrong": "The field has no default and a non-optional type, so it is required. Every existing client that does not send routing_policy starts failing validation the moment this deploys. The version registry was not touched, so there is no record a client could pin against and no second reviewer was pulled in. And the contract test was not updated, so the suite is green while asserting nothing about the new shape.",
+
+  "edits": [
+    {
+      "file": "vllm/entrypoints/openai/chat_completion/protocol.py",
+      "find": "    model: str\n    messages: list[ChatMessage]\n    max_tokens: int | None = None",
+      "replace": "    model: str\n    messages: list[ChatMessage]\n    routing_policy: str\n    max_tokens: int | None = None"
+    },
+    {
+      "file": "vllm/entrypoints/openai/chat_completion/serving.py",
+      "find": "        engine_request = render_chat_request(request)\n        result = await self._engine.generate(engine_request)",
+      "replace": "        engine_request = render_chat_request(request)\n        engine_request.routing_policy = request.routing_policy\n        result = await self._engine.generate(engine_request)"
+    }
+  ],
+
+  "expect": {
+    "verdict": "escalate-to-design-review",
+    "mustFlag": [
+      "adr-constraint:ADR-0002/contract-change-needs-version-entry",
+      "adr-constraint:ADR-0007/contract-change-needs-contract-test",
+      "compat/required-field-added"
+    ],
+    "mustNotFlag": [
+      "adr-constraint:ADR-0003/serving-handlers-reach-the-gate",
+      "adr-constraint:ADR-0001/gateway-must-not-reach-past-engine",
+      "adr-constraint:ADR-0000/handlers-validate-locally"
+    ],
+    "notes": "This is the brief's headline case: valid-looking diff, violates a documented decision. ADR-0000 is in mustNotFlag because it is superseded — if it fires, ADR status is being ignored."
+  }
+}

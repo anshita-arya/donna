@@ -1,0 +1,49 @@
+# FICTIONAL ownership for the Donna demo.
+#
+# Every handle below is an invented team name. No real person, employee or team
+# is named here, and this does not describe vLLM's real ownership.
+#
+# Later rules win, as GitHub's CODEOWNERS does.
+
+# Default: the platform group sees anything no one else claims.
+*                                               @platform-eng
+
+# --- Public HTTP surface -------------------------------------------------
+vllm/entrypoints/                               @svc-api-gateway
+vllm/entrypoints/serve/                         @svc-api-gateway
+vllm/entrypoints/openai/                        @svc-api-gateway
+
+# Contracts carry a second required reviewer: a change here is a change for
+# every client, and the gateway team alone should not be able to ship one.
+vllm/entrypoints/openai/**/protocol.py          @svc-api-gateway @contract-council
+vllm/entrypoints/openai/api_versions.py         @contract-council
+
+# --- Validation ---------------------------------------------------------
+vllm/entrypoints/validation/                    @svc-platform-safety
+
+# --- Render -------------------------------------------------------------
+vllm/renderers/                                 @svc-render
+vllm/inputs/                                    @svc-render
+
+# --- Engine -------------------------------------------------------------
+vllm/v1/engine/                                 @svc-engine-core
+vllm/v1/engine/async_llm.py                     @svc-engine-core @platform-eng
+vllm/v1/engine/admission_control.py             @svc-engine-core @svc-reliability
+
+# --- Scheduler ----------------------------------------------------------
+vllm/v1/core/                                   @svc-scheduler
+vllm/v1/core/sched/interface.py                 @svc-scheduler @svc-engine-core
+
+# --- Executor -----------------------------------------------------------
+vllm/v1/executor/                               @svc-executor
+vllm/v1/worker/                                 @svc-executor
+
+# --- Observability ------------------------------------------------------
+vllm/v1/metrics/                                @svc-observability
+vllm/tracing/                                   @svc-observability
+vllm/logging_utils/                             @svc-observability
+
+# --- Tests --------------------------------------------------------------
+tests/entrypoints/                              @svc-api-gateway @qa-serving
+tests/v1/core/                                  @svc-scheduler @qa-serving
+tests/v1/engine/                                @svc-engine-core @qa-serving

@@ -1,0 +1,149 @@
+{
+  "_comment": "FICTIONAL demo context. Service names, owners and dependency policy are invented and are not a claim about vLLM's real architecture or ownership. Paths mirror vLLM's public layout so the pack also works against a real clone.",
+
+  "contextPack": {
+    "name": "Inference serving platform (synthetic demo pack)",
+    "synthetic": true,
+    "disclaimer": "Architecture, decisions, ownership and policy in this pack are fictional and invented for a demo. They are not vLLM's real architecture or ownership, and no real person or team is named."
+  },
+
+  "services": [
+    {
+      "name": "api-gateway",
+      "description": "Public HTTP surface. Owns the request/response contracts clients depend on.",
+      "match": [
+        "vllm/entrypoints/openai/**",
+        "vllm/entrypoints/anthropic/**",
+        "vllm/entrypoints/cohere/**",
+        "vllm/entrypoints/generate/**"
+      ],
+      "owners": ["@svc-api-gateway", "@contract-council"],
+      "dependsOn": [
+        "serving-common",
+        "request-validation",
+        "request-render",
+        "engine-core",
+        "observability"
+      ]
+    },
+    {
+      "name": "serving-common",
+      "description": "Shared HTTP plumbing: dependencies, cancellation, load-aware dispatch.",
+      "match": ["vllm/entrypoints/serve/**"],
+      "owners": ["@svc-api-gateway"],
+      "dependsOn": []
+    },
+    {
+      "name": "request-validation",
+      "description": "The validation gate. Every inference request is accepted or rejected here before it reaches the engine.",
+      "match": ["vllm/entrypoints/validation/**"],
+      "owners": ["@svc-platform-safety"],
+      "dependsOn": ["serving-common"]
+    },
+    {
+      "name": "request-render",
+      "description": "Turns caller-supplied messages and prompts into engine inputs.",
+      "match": ["vllm/renderers/**", "vllm/inputs/**"],
+      "owners": ["@svc-render"],
+      "dependsOn": ["serving-common", "observability"]
+    },
+    {
+      "name": "engine-core",
+      "description": "Request lifecycle, admission control and the step loop. Fronted by the AsyncLLM facade.",
+      "match": ["vllm/v1/engine/**"],
+      "owners": ["@svc-engine-core"],
+      "dependsOn": ["scheduler", "executor", "request-render", "observability"]
+    },
+    {
+      "name": "scheduler",
+      "description": "Continuous batching, the request queue and KV cache accounting.",
+      "match": ["vllm/v1/core/**"],
+      "owners": ["@svc-scheduler"],
+      "dependsOn": ["observability"]
+    },
+    {
+      "name": "executor",
+      "description": "Forward-pass execution across one or many processes.",
+      "match": ["vllm/v1/executor/**", "vllm/v1/worker/**"],
+      "owners": ["@svc-executor"],
+      "dependsOn": ["observability"]
+    },
+    {
+      "name": "observability",
+      "description": "Metrics, tracing and structured logging. Depended on by everything; depends on nothing.",
+      "match": ["vllm/v1/metrics/**", "vllm/tracing/**", "vllm/logging_utils/**"],
+      "owners": ["@svc-observability"],
+      "dependsOn": []
+    }
+  ],
+
+  "adrDir": "adr",
+
+  "designDocs": ["architecture-overview.md"],
+
+  "ownership": {
+    "codeowners": "CODEOWNERS",
+    "records": [
+      {
+        "match": ["vllm/entrypoints/openai/api_versions.py"],
+        "owners": ["@contract-council"],
+        "team": "API contract council"
+      },
+      {
+        "match": ["vllm/entrypoints/validation/**"],
+        "owners": ["@svc-platform-safety"],
+        "team": "Platform safety"
+      }
+    ]
+  },
+
+  "tests": {
+    "match": ["tests/**", "**/test_*.py", "**/*_test.py"],
+    "integration": [
+      "tests/entrypoints/**",
+      "tests/v1/engine/**",
+      "**/test_*_e2e.py"
+    ],
+    "expectations": "test-expectations.json"
+  },
+
+  "compat": [
+    {
+      "id": "openai-http-contract",
+      "surface": [
+        "vllm/entrypoints/openai/**/protocol.py",
+        "vllm/entrypoints/anthropic/protocol.py",
+        "vllm/entrypoints/cohere/protocol.py"
+      ],
+      "policy": "Request and response models under vllm/entrypoints are the published HTTP contract. Removing or renaming a field, removing a route, or adding a required request field are all breaking changes for existing clients.",
+      "versionRegistry": ["vllm/entrypoints/openai/api_versions.py"],
+      "severity": "blocker"
+    },
+    {
+      "id": "engine-facade-contract",
+      "surface": ["vllm/v1/engine/async_llm.py"],
+      "policy": "AsyncLLM is the only engine entry point the serving layer may use, so its public signature is a contract across a service boundary.",
+      "severity": "blocker"
+    },
+    {
+      "id": "scheduler-interface-contract",
+      "surface": ["vllm/v1/core/sched/interface.py"],
+      "policy": "SchedulerInterface and SchedulerOutput are what the engine is allowed to assume about any scheduler. Changing them changes every scheduler implementation.",
+      "severity": "concern"
+    }
+  ],
+
+  "include": ["**/*.{py,pyi}"],
+
+  "ignore": [
+    "**/node_modules/**",
+    "**/.git/**",
+    "**/__pycache__/**",
+    "**/.venv/**",
+    "**/build/**",
+    "**/dist/**",
+    "**/*.egg-info/**"
+  ],
+
+  "accepted": []
+}

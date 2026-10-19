@@ -1,0 +1,28 @@
+{
+  "//": "Compiles the headless analysis pipeline plus the eval harness. Excludes everything that imports `vscode`, so it builds and runs with Node alone.",
+  "compilerOptions": {
+    "module": "Node16",
+    "moduleResolution": "Node16",
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "types": ["node"],
+    "outDir": "out-eval",
+    "rootDir": ".",
+    "sourceMap": true,
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true
+  },
+  "include": [
+    "src/core/**/*.ts",
+    "src/evidence/**/*.ts",
+    "src/constraints/**/*.ts",
+    "src/assess/**/*.ts",
+    "src/agents/model.ts",
+    "src/agents/prompts.ts",
+    "src/agents/impact.ts",
+    "src/agents/designReview.ts",
+    "src/agents/guardrails.ts",
+    "test/**/*.ts"
+  ]
+}

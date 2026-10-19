@@ -1,0 +1,48 @@
+{
+  "id": "03-additive-optional-field",
+  "title": "Add an optional seed parameter for reproducible sampling",
+  "agentPrompt": "Add an optional seed parameter to the chat completion request so callers can get reproducible sampling. Follow whatever versioning and test conventions this repo uses.",
+
+  "whyItLooksFine": "Because it is fine. This is the control case.",
+
+  "whatIsActuallyWrong": "Nothing. The field is optional with a default, the version registry entry lands in the same change, and the contract test gains an assertion about the new shape. A tool that cannot say 'this is ready' is not a review tool, it is a brake — and a brake gets disabled. This scenario is the false-positive guard for the other three.",
+
+  "edits": [
+    {
+      "file": "vllm/entrypoints/openai/chat_completion/protocol.py",
+      "find": "    stop: list[str] | None = None\n    reasoning_effort: str | None = None",
+      "replace": "    stop: list[str] | None = None\n    reasoning_effort: str | None = None\n    seed: int | None = None"
+    },
+    {
+      "file": "vllm/entrypoints/openai/api_versions.py",
+      "find": "    ContractVersion(\n        contract=\"ChatCompletionRequest\",\n        version=\"2026-04-02\",\n        summary=\"Added optional reasoning_effort.\",\n        fields_added=(\"reasoning_effort\",),\n    ),\n)",
+      "replace": "    ContractVersion(\n        contract=\"ChatCompletionRequest\",\n        version=\"2026-04-02\",\n        summary=\"Added optional reasoning_effort.\",\n        fields_added=(\"reasoning_effort\",),\n    ),\n    ContractVersion(\n        contract=\"ChatCompletionRequest\",\n        version=\"2026-10-16\",\n        summary=\"Added optional seed for reproducible sampling. Additive and optional, so no client is affected.\",\n        breaking=False,\n        fields_added=(\"seed\",),\n    ),\n)"
+    },
+    {
+      "file": "vllm/entrypoints/openai/api_versions.py",
+      "find": "CURRENT_CONTRACT_VERSION = \"2026-04-02\"",
+      "replace": "CURRENT_CONTRACT_VERSION = \"2026-10-16\""
+    },
+    {
+      "file": "tests/entrypoints/openai/test_chat_completion_contract.py",
+      "find": "def test_contract_version_registry_is_current():",
+      "replace": "def test_seed_is_optional_and_absent_by_default():\n    \"\"\"A caller that does not send seed must still be valid.\"\"\"\n    request = ChatCompletionRequest(\n        model=\"demo-7b\", messages=[ChatMessage(role=\"user\", content=\"hello\")]\n    )\n    assert request.seed is None\n\n\ndef test_contract_version_registry_is_current():"
+    }
+  ],
+
+  "expect": {
+    "verdict": "ready-to-propose",
+    "mustFlag": [],
+    "mustNotFlag": [
+      "adr-constraint:ADR-0002/contract-change-needs-version-entry",
+      "adr-constraint:ADR-0007/contract-change-needs-contract-test",
+      "compat/required-field-added",
+      "compat/contract-field-removed",
+      "adr-constraint:ADR-0001/gateway-must-not-reach-past-engine",
+      "adr-constraint:ADR-0003/serving-handlers-reach-the-gate",
+      "adr-constraint:ADR-0005/scheduler-consumed-through-entry",
+      "tests/expectation-unmet"
+    ],
+    "notes": "Must come back clean. Any conflict here is a false positive, and false positives are how this tool stops being used."
+  }
+}

@@ -1,0 +1,109 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Donna configuration",
+  "description": "Service map, design records, ownership and compatibility rules Donna assesses a change against.",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "_comment": { "type": "string" },
+    "contextPack": {
+      "type": ["object", "null"],
+      "description": "Provenance for this context. Mark `synthetic: true` for demo or invented context so every scorecard says so.",
+      "required": ["name", "synthetic"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "synthetic": { "type": "boolean" },
+        "disclaimer": { "type": "string" }
+      }
+    },
+    "services": {
+      "type": "array",
+      "description": "Components of the system, each a set of path globs. Used for affected-service reporting, dependency policy and owner routing.",
+      "items": {
+        "type": "object",
+        "required": ["name", "match"],
+        "additionalProperties": false,
+        "properties": {
+          "name": { "type": "string" },
+          "description": { "type": "string" },
+          "match": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+          "owners": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Owner handles. An empty array is meaningful: it triggers a missing-ownership escalation."
+          },
+          "dependsOn": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Services this one may depend on. Omit the field entirely for 'unconstrained'; an empty array means 'nothing'."
+          }
+        }
+      }
+    },
+    "adrDir": {
+      "type": ["string", "null"],
+      "description": "Directory of architecture decision records. Each may carry a fenced ```donna JSON block with machine-checkable constraints."
+    },
+    "designDocs": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Additional design documents. Cited and handed to the model pass; never edited."
+    },
+    "ownership": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "codeowners": { "type": ["string", "null"] },
+        "records": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["match", "owners"],
+            "additionalProperties": false,
+            "properties": {
+              "match": { "type": "array", "items": { "type": "string" } },
+              "owners": { "type": "array", "items": { "type": "string" } },
+              "team": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "tests": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "match": { "type": "array", "items": { "type": "string" } },
+        "integration": { "type": "array", "items": { "type": "string" } },
+        "expectations": {
+          "type": ["string", "null"],
+          "description": "JSON file declaring 'a change here requires a test there' rules."
+        }
+      }
+    },
+    "compat": {
+      "type": "array",
+      "description": "Public contract surfaces and the policy governing them.",
+      "items": {
+        "type": "object",
+        "required": ["id", "surface", "policy"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string" },
+          "surface": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+          "policy": { "type": "string" },
+          "versionRegistry": { "type": "array", "items": { "type": "string" } },
+          "severity": { "enum": ["blocker", "concern"] }
+        }
+      }
+    },
+    "include": { "type": "array", "items": { "type": "string" } },
+    "ignore": { "type": "array", "items": { "type": "string" } },
+    "accepted": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Observation ids the team has accepted. Prefer accepting from the Donna view, which stores them per-workspace rather than in this file."
+    }
+  }
+}

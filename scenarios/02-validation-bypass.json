@@ -1,0 +1,41 @@
+{
+  "id": "02-validation-bypass",
+  "title": "Remove duplicate request validation from the chat handler",
+  "agentPrompt": "The chat completion handler validates the request and then the engine validates it again. Remove the duplicate validation from the handler to cut a redundant check off the hot path.",
+
+  "whyItLooksFine": "The premise is plausible and the diff is a deletion. The engine does perform checks, so 'this is validated twice' reads as a true observation, and removing work from a request hot path reads as an improvement. Every existing test still passes: the validation tests assert that known-bad requests are rejected, and they call the gate directly rather than going through the handler, so deleting the handler's call does not fail them.",
+
+  "whatIsActuallyWrong": "The engine's checks are load decisions, not shape decisions — ADR-0003 is explicit that the engine is allowed to assume its inputs are already acceptable. With the gate bypassed, an oversized prompt no longer gets a 4xx at the edge; it reaches the scheduler, fails KV cache allocation, and takes the in-flight batch down with it. That is the exact incident ADR-0003 was written after. The route also loses its JSON-body dependency, so a malformed body now reaches handler code that will guess at it.",
+
+  "edits": [
+    {
+      "file": "vllm/entrypoints/openai/chat_completion/serving.py",
+      "find": "from vllm.entrypoints.serve.utils.api_utils import RequestValidationError\nfrom vllm.entrypoints.validation.guards import enforce_request_guards\nfrom vllm.renderers.online_renderer import render_chat_request",
+      "replace": "from vllm.renderers.online_renderer import render_chat_request"
+    },
+    {
+      "file": "vllm/entrypoints/openai/chat_completion/serving.py",
+      "find": "        try:\n            enforce_request_guards(request, served_model=self._served_model)\n        except RequestValidationError as exc:\n            return ErrorResponse(message=str(exc), type=\"invalid_request_error\", code=400)\n\n        engine_request = render_chat_request(request)",
+      "replace": "        engine_request = render_chat_request(request)"
+    },
+    {
+      "file": "vllm/entrypoints/openai/chat_completion/api_router.py",
+      "find": "@router.post(\"/v1/chat/completions\", dependencies=[Depends(validate_json_request)])",
+      "replace": "@router.post(\"/v1/chat/completions\")"
+    }
+  ],
+
+  "expect": {
+    "verdict": "escalate-to-design-review",
+    "mustFlag": [
+      "adr-constraint:ADR-0003/serving-handlers-reach-the-gate",
+      "adr-constraint:ADR-0003/routes-declare-json-validation",
+      "adr-constraint:ADR-0007/validation-change-needs-validation-test"
+    ],
+    "mustNotFlag": [
+      "adr-constraint:ADR-0002/contract-change-needs-version-entry",
+      "adr-constraint:ADR-0000/handlers-validate-locally"
+    ],
+    "notes": "The second scenario from the brief: required validation bypassed before inference requests are routed. Note that the completion handler still reaches the gate, so the reachability check must flag the chat handler specifically rather than the whole glob."
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "_comment": "FICTIONAL test expectations for the Donna demo. These declare 'a change here needs a test there' rules that are about test *existence and relevance*, complementing ADR-0007's 'the test must change in the same commit' constraints.",
+
+  "expectations": [
+    {
+      "id": "contract-shape",
+      "when": ["vllm/entrypoints/openai/**/protocol.py"],
+      "requireTests": ["tests/entrypoints/openai/test_chat_completion_contract.py"],
+      "reason": "Contract shape changes need the contract test suite run, because it is the only place that asserts what clients can rely on.",
+      "integration": true
+    },
+    {
+      "id": "validation-gate",
+      "when": [
+        "vllm/entrypoints/validation/**",
+        "vllm/entrypoints/**/api_router.py",
+        "vllm/entrypoints/serve/utils/api_utils.py"
+      ],
+      "requireTests": ["tests/entrypoints/openai/test_validation_gate.py"],
+      "reason": "The gate is the only thing standing between a malformed request and the engine, so changes to it or to the routes that declare it need the gate tests.",
+      "integration": true
+    },
+    {
+      "id": "scheduler-policy",
+      "when": ["vllm/v1/core/**"],
+      "requireTests": ["tests/v1/core/test_scheduler.py"],
+      "reason": "Batching and KV cache accounting changes need the scheduler tests, which cover admission order, the token budget and cache exhaustion.",
+      "integration": false
+    },
+    {
+      "id": "engine-lifecycle",
+      "when": ["vllm/v1/engine/**"],
+      "requireTests": ["tests/v1/engine/test_async_llm.py"],
+      "reason": "Request lifecycle and admission control changes need the end-to-end engine test, which is the only test that exercises the full step loop.",
+      "integration": true
+    },
+    {
+      "id": "streaming-capacity",
+      "when": [
+        "vllm/entrypoints/openai/**/serving.py",
+        "vllm/v1/engine/async_llm.py"
+      ],
+      "requireTests": ["tests/entrypoints/openai/test_streaming_capacity.py"],
+      "reason": "ADR-0008 requires that a streaming request which stops making progress releases its capacity. No test asserts this yet, so a change to the streaming path has nothing to validate it against.",
+      "integration": true
+    }
+  ]
+}

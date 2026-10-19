@@ -1,0 +1,37 @@
+{
+  "id": "04-gateway-reaches-scheduler",
+  "title": "Reject oversized prompts at the gateway with a 503 instead of letting them through",
+  "agentPrompt": "When a prompt is bigger than the scheduler's batch budget the request is going to be slow or fail. Check the budget in the chat handler and return a 503 early so the client can retry.",
+
+  "whyItLooksFine": "Failing fast at the edge is usually the right instinct, and the implementation is six lines that read clearly. The import is a single constant, not a class — it does not feel like reaching into another service's internals, it feels like reading a configuration value. The handler tests pass because none of them send a prompt that large.",
+
+  "whatIsActuallyWrong": "This is the second incident in ADR-0001, re-committed. The gateway is now making an admission decision using a constant owned by the scheduler, read from a different process, with no coordination — and MAX_NUM_BATCHED_TOKENS is a tuning parameter the scheduler team changes when the traffic mix shifts, which means the gateway's behaviour will silently change with it. It also violates ADR-0005: the batch budget is scheduler policy, deliberately internal so it can keep being retuned. Nobody decided the gateway should shed load; the import decided it.",
+
+  "edits": [
+    {
+      "file": "vllm/entrypoints/openai/chat_completion/serving.py",
+      "find": "from vllm.renderers.online_renderer import render_chat_request\nfrom vllm.v1.engine.async_llm import AsyncLLM",
+      "replace": "from vllm.renderers.online_renderer import render_chat_request\nfrom vllm.v1.core.sched.scheduler import MAX_NUM_BATCHED_TOKENS\nfrom vllm.v1.engine.async_llm import AsyncLLM"
+    },
+    {
+      "file": "vllm/entrypoints/openai/chat_completion/serving.py",
+      "find": "        engine_request = render_chat_request(request)\n        result = await self._engine.generate(engine_request)",
+      "replace": "        engine_request = render_chat_request(request)\n        if len(engine_request.token_ids) > MAX_NUM_BATCHED_TOKENS:\n            return ErrorResponse(\n                message=\"prompt exceeds the current batch budget, retry shortly\",\n                type=\"server_overloaded\",\n                code=503,\n            )\n\n        result = await self._engine.generate(engine_request)"
+    }
+  ],
+
+  "expect": {
+    "verdict": "escalate-to-design-review",
+    "mustFlag": [
+      "adr-constraint:ADR-0001/gateway-must-not-reach-past-engine",
+      "adr-constraint:ADR-0005/scheduler-consumed-through-entry",
+      "blast-radius/new-cross-service-edge"
+    ],
+    "mustNotFlag": [
+      "adr-constraint:ADR-0002/contract-change-needs-version-entry",
+      "adr-constraint:ADR-0003/serving-handlers-reach-the-gate",
+      "adr-constraint:ADR-0000/handlers-validate-locally"
+    ],
+    "notes": "The validation gate is still reached in this scenario, so ADR-0003 must stay quiet — it checks that the reachability rule is precise rather than firing on any change to serving.py."
+  }
+}
