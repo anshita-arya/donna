@@ -1,13 +1,13 @@
 # Demo script — three agents around one change
 
-Roughly 8 minutes. Everything runs offline; nothing here touches private code.
+Roughly 8 minutes. The demo uses only synthetic local code and context. The
+optional model pass requires a configured provider.
 
 ## What the audience should take away
 
 Three agents, each with a different authority:
 
-1. **The coding agent** writes code. (Claude Code, Cursor — or the scripted
-   stand-in, so the demo is deterministic.)
+1. **Your coding agent** writes code (for example, Claude Code, Copilot or Codex).
 2. **The impact-analysis agent** runs *in parallel*, investigates, and produces a
    scorecard. It cannot change anything.
 3. **The design-review agent** runs only when the developer asks, and produces a
@@ -38,7 +38,6 @@ In Window B, set two settings (`.vscode/settings.json` in the sandbox):
 ```json
 {
   "donna.contextPack": "../../context-pack",
-  "donna.demo.scenarioDir": "../../scenarios",
   "donna.llm.trigger": "onConflict"
 }
 ```
@@ -77,10 +76,13 @@ Then open `context-pack/adr/ADR-0002-contract-versioning.md` and scroll to
 
 ## Act 2 — the coding agent produces a change (1 min)
 
-In Window B, run **Donna: Run Demo Scenario** and pick
-**“Add a routing_policy field to the chat completion request”**.
+In Window B, ask your coding agent:
 
-Show what the developer would see. Open the diff:
+> "Our gateway needs to know which routing policy to use per request. Add a
+> `routing_policy` field to the chat completion request model so callers can
+> specify it."
+
+Donna watches the coding agent's edits and assesses them. Open the diff:
 
 ```bash
 git diff
@@ -173,8 +175,9 @@ go from conflict to clear.
 This is the act people skip, and it is the one that decides whether the tool
 survives contact with a real team.
 
-Run **Donna: Revert Demo Scenario**, then **Run Demo Scenario** →
-**“Add an optional seed parameter for reproducible sampling”**.
+Ask your coding agent to revert the Act 2 change, then add an optional `seed`
+parameter to the chat completion request. Have it follow the repository's
+versioning and test conventions, as in `scenarios/03-additive-optional-field.json`.
 
 Verdict: **Looks ready to propose.** No conflicts. Checklist empty of blockers.
 
@@ -233,7 +236,7 @@ Pre-PR conflict detection
 | Scorecard empty, status bar says "no changes against the base ref" | The sandbox has no commits, or no `main`. Run the git setup above. |
 | "No language model is available" | Expected without a signed-in provider. The deterministic findings still land — say so and carry on; it demonstrates the model pass being additive rather than load-bearing. |
 | Model pass returns nothing usable | The impact agent drops uncited observations by design, and reports the drop in blind spots. Point at that — it is the behaviour, not a failure. |
-| Demo scenario will not apply | The sandbox has drifted. `git checkout .` in `demo/sandbox`, then re-run. |
+| The coding agent changes unexpected files | Review its diff and revert or adjust the changes using your normal workflow before continuing. |
 | Findings look stale | Something is still writing. The watcher waits 2.5s after the last write; the status bar shows "waiting for writes to settle". |
 
 ## Questions worth pre-loading

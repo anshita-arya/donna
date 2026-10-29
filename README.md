@@ -158,11 +158,11 @@ the eval harness exercise the same code path the extension does.
 | `src/evidence/` | ADR indexing, ownership resolution, test coverage mapping |
 | `src/constraints/` | The constraint engine and its six kinds |
 | `src/assess/` | Blast radius, compatibility, production risk, scorecard assembly, markdown rendering |
-| `src/agents/` | Model access, prompts, the impact pass, the design-review agent, guardrails, the coding-agent stand-in |
+| `src/agents/` | Model access, prompts, the impact pass, the design-review agent, guardrails |
 | `src/ui/` | Scorecard webview, tree views, diagnostics, status bar |
 | `context-pack/` | **Synthetic, clearly labelled** demo context: service map, 9 ADRs, CODEOWNERS, test expectations |
 | `demo/sandbox/` | A self-contained Python package whose layout mirrors vLLM's public layout |
-| `scenarios/` | Four prepared changes an assistant plausibly produces |
+| `scenarios/` | Four prepared changes for the evaluation harness |
 | `test/` | Unit tests for the primitives; the scenario eval harness |
 
 ## ADRs as executable constraints
@@ -301,10 +301,11 @@ Pre-PR conflict detection
   Clean changes left alone:           1/1
 ```
 
-The scenario harness stands up a real git repository, plays the coding agent by
-applying the scenario's edits, and runs the same `assess()` the extension runs
-against a real `git diff`. Scenario 03 is the control: a tool that cannot say
-"this is ready" is a brake, and brakes get disabled.
+The scenario harness stands up a real git repository, applies prepared change
+fixtures, and runs the same `assess()` the extension runs against a real
+`git diff`. It is test infrastructure; the extension does not write these
+changes. Scenario 03 is the control: a tool that cannot say "this is ready" is
+a brake, and brakes get disabled.
 
 Each scenario declares `mustNotFlag` as well as `mustFlag`, because false
 positives move the metric in the wrong direction.

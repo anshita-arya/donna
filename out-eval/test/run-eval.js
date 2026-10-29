@@ -2,10 +2,10 @@
 /**
  * The eval harness.
  *
- * For each prepared scenario it stands up a real git repository, plays the role
- * of the coding agent by applying the scenario's edits, and then runs the same
- * `assess()` the extension runs against a real `git diff`. Nothing is
- * synthesised: if this passes, the extension is exercising the same code path.
+ * For each prepared scenario it stands up a real git repository, applies the
+ * scenario's edits as test fixtures, and then runs the same `assess()` the
+ * extension runs against a real `git diff`. The extension itself does not
+ * apply these edits.
  *
  * It answers the prototype's version of the product metric — of the scenarios
  * that contain a genuine design conflict, how many were caught *before* a PR
@@ -114,8 +114,8 @@ function createFixture(scenarioId) {
     run(dir, 'git', ['checkout', '-b', `agent/${scenarioId}`]);
     return dir;
 }
-/** The coding-agent stand-in: applies the scenario's edits to the working tree. */
-function applyAsCodingAgent(repo, scenario) {
+/** Applies a scenario's prepared edits as fixtures in the temporary repo. */
+function applyScenarioEdits(repo, scenario) {
     const touched = [];
     for (const [index, edit] of scenario.edits.entries()) {
         const abs = path.join(repo, edit.file);
@@ -203,7 +203,7 @@ function main() {
         const repo = createFixture(scenario.id);
         let touched;
         try {
-            touched = applyAsCodingAgent(repo, scenario);
+            touched = applyScenarioEdits(repo, scenario);
         }
         catch (error) {
             console.error(`  SETUP FAILED: ${error.message}`);

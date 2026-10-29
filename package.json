@@ -123,15 +123,6 @@
         "command": "donna.showLog",
         "title": "Donna: Show Log",
         "icon": "$(output)"
-      },
-      {
-        "command": "donna.runDemoScenario",
-        "title": "Donna: Run Demo Scenario (coding-agent stand-in)",
-        "icon": "$(beaker)"
-      },
-      {
-        "command": "donna.revertDemoScenario",
-        "title": "Donna: Revert Demo Scenario"
       }
     ],
     "menus": {
@@ -289,11 +280,6 @@
           ],
           "default": "unknown",
           "description": "Least severe status that gets a squiggle. Everything still appears in the Donna views."
-        },
-        "donna.demo.scenarioDir": {
-          "type": "string",
-          "default": "",
-          "markdownDescription": "Directory of prepared demo scenarios, used by `Donna: Run Demo Scenario`. This stands in for a coding agent so the three-agent flow can be demonstrated end to end."
         }
       }
     },

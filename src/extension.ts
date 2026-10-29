@@ -13,12 +13,6 @@ import { runDesignReview } from './agents/designReview';
 import { validateEditAgainstFile, type SuggestedEdit } from './agents/guardrails';
 import { AnthropicClient, ModelUnavailableError, type ModelClient } from './agents/model';
 import { VsCodeModelClient } from './agents/vscodeModel';
-import {
-  applyScenario,
-  loadScenarios,
-  revertScenario,
-  type AppliedScenario,
-} from './agents/codingStandIn';
 import { DiagnosticsPublisher } from './ui/diagnostics';
 import { ScorecardPanel } from './ui/scorecardPanel';
 import { StatusBar } from './ui/status';
@@ -34,7 +28,6 @@ interface Session {
   card?: Scorecard;
   prepared?: PreparedAssessment;
   proposedEdits: SuggestedEdit[];
-  demo?: AppliedScenario;
   running: boolean;
 }
 
@@ -485,75 +478,6 @@ export function activate(context: vscode.ExtensionContext): void {
       `Donna: applied the edit to ${edit.file}. Re-assessing.`,
     );
     await runAssessment({ reason: 'proposed edit applied' });
-  });
-
-  // --- Demo: the coding-agent stand-in --------------------------------------
-
-  register('donna.runDemoScenario', async () => {
-    const config = vscode.workspace.getConfiguration('donna');
-    const configured = config.get<string>('demo.scenarioDir', '').trim();
-    const dir = configured
-      ? path.isAbsolute(configured)
-        ? configured
-        : path.resolve(session.repoRoot, configured)
-      : path.resolve(session.repoRoot, 'scenarios');
-
-    const { scenarios, issues } = loadScenarios(dir);
-    for (const issue of issues) log.warn(issue);
-
-    if (scenarios.length === 0) {
-      void vscode.window.showWarningMessage(
-        `Donna: no demo scenarios found in ${dir}. Set "donna.demo.scenarioDir".`,
-      );
-      return;
-    }
-
-    const picked = await vscode.window.showQuickPick(
-      scenarios.map((scenario) => ({
-        label: scenario.title,
-        description: scenario.id,
-        detail: scenario.agentPrompt,
-        scenario,
-      })),
-      {
-        title: 'Coding-agent stand-in — pick a change to produce',
-        placeHolder: 'This writes files, standing in for Claude Code or Cursor.',
-      },
-    );
-    if (!picked) return;
-
-    try {
-      if (session.demo) {
-        revertScenario(session.repoRoot, session.demo);
-        session.demo = undefined;
-      }
-      session.demo = applyScenario(session.repoRoot, picked.scenario);
-      log.info(
-        `Coding-agent stand-in applied "${session.demo.scenario.id}" to ${session.demo.touched.join(', ')}.`,
-      );
-      void vscode.window.showInformationMessage(
-        `Coding agent changed ${session.demo.touched.length} file${session.demo.touched.length === 1 ? '' : 's'}. Donna is assessing in parallel.`,
-      );
-      await runAssessment({ reason: `demo scenario ${session.demo.scenario.id}` });
-      void vscode.commands.executeCommand('donna.openScorecard');
-    } catch (error) {
-      log.error('Demo scenario failed to apply', error);
-      void vscode.window.showErrorMessage(`Donna demo: ${(error as Error).message}`);
-    }
-  });
-
-  register('donna.revertDemoScenario', async () => {
-    if (!session.demo) {
-      void vscode.window.showInformationMessage('Donna: no demo scenario is applied.');
-      return;
-    }
-    const restored = revertScenario(session.repoRoot, session.demo);
-    log.info(`Reverted demo scenario, restoring ${restored.join(', ')}.`);
-    session.demo = undefined;
-    void vscode.window.showInformationMessage(
-      `Donna: reverted ${restored.length} file${restored.length === 1 ? '' : 's'}.`,
-    );
-    await runAssessment({ reason: 'demo scenario reverted' });
   });
 
   // Kick off a first assessment so the views are not empty on open.

@@ -1,8 +1,7 @@
 {
   "//": "Pre-configured for the demo. The context pack lives outside this repo on purpose — it is the 'design context maintained separately from the code' case.",
   "donna.contextPack": "../../context-pack",
-  "donna.demo.scenarioDir": "../../scenarios",
   "donna.llm.trigger": "onConflict",
-  "donna.watch.enabled": true,
+  "donna.watch.enabled": false,
   "donna.blastRadiusDepth": 3
 }
