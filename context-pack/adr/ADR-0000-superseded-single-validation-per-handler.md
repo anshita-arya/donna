@@ -8,9 +8,8 @@
 > *Fictional decision, written for the Donna demo. Not vLLM's real history.*
 
 > **Note for readers of the Donna demo:** this ADR is here to show that
-> status is honoured. It is `Superseded`, so Donna does not evaluate its
-> constraints and does not cite it as governing anything — a tool that enforced
-> retired decisions would be worse than one that enforced none.
+> status is honoured. It is `Superseded`, so Donna excludes it from review —
+> treating a retired decision as current would be worse than missing it.
 
 ## Context
 
@@ -34,28 +33,3 @@ The duplication was not a cosmetic problem. A new endpoint shipped without the
 token-ceiling check, a 400k-token prompt reached the scheduler, and the KV cache
 allocation failure took down the in-flight batch with it. See ADR-0003, which
 replaces this decision with a single validation gate.
-
-## Enforcement
-
-```donna
-{
-  "id": "ADR-0000",
-  "status": "superseded",
-  "supersededBy": "ADR-0003",
-  "owners": ["@svc-api-gateway"],
-  "appliesTo": ["vllm/entrypoints/**"],
-  "constraints": [
-    {
-      "id": "handlers-validate-locally",
-      "kind": "forbidden-dependency",
-      "severity": "blocker",
-      "rationale": "RETIRED. This rule forbade a shared validation module, which is exactly what ADR-0003 now requires. If Donna ever reports this constraint, it is ignoring ADR status and that is a bug.",
-      "params": {
-        "from": ["vllm/entrypoints/openai/**/serving.py"],
-        "to": ["vllm/entrypoints/validation/**"],
-        "transitive": false
-      }
-    }
-  ]
-}
-```

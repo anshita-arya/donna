@@ -11,25 +11,25 @@ A VS Code extension that runs **in parallel to your coding agent** and assesses
 the system-wide impact of its change **before you open a pull request**.
 
 The coding agent writes the code. Donna does the background investigation
-you would otherwise do manually afterwards: which services and dependencies the
-change reaches, which documented design decisions it conflicts with, whether it
-is backward compatible, what could go wrong in production, which tests apply,
-and who needs to review it.
+you would otherwise do manually afterwards:
+1. Which services and dependencies the change reaches
+2. Which documented design decisions it conflicts with
+3. Whether it is backward compatible, what could go wrong in production, which
+   tests apply, and who needs to review it.
 
-It produces a reviewable scorecard. It does not approve anything.
+It produces a reviewable scorecard. It does not change or approve anything on your behalf.
 
-> **Why "Donna":** she has already read the file nobody else opened, and she
+> **Why "Donna":** Donna is the assistant everyone needs. She has already read the file nobody else opened, and she
 > tells you the uncomfortable thing *before* you walk into the room. And the part
 > that matters for a tool like this one — she has no formal authority and
 > enormous influence. She doesn't sign anything and she doesn't decide. She makes
-> sure you aren't about to make a mistake you can't walk back.
+> sure you aren't about to make a mistake which will be incredibly difficult to walk back.
 
 ---
 
 ## The problem it addresses
 
-An assistant finishes a change. The diff looks fine. The tests pass. The
-developer opens a PR — and then finds out that the change conflicts with an
+A coding assistant finishes a change. The diff looks fine. The code builds. The tests pass. The developer opens a PR, and then finds out that the change conflicts with an
 architecture decision written eight months ago by someone on another team, or
 that the "additive" field they added is required and breaks every existing
 client, or that the redundant-looking check they removed was the only thing
@@ -51,7 +51,7 @@ about it:
 
 | Dimension | What it answers | How |
 | --- | --- | --- |
-| **Design conformance** | Does this contradict a documented decision? | ADR constraints executed against the diff and the dependency graph |
+| **Design conformance** | Does this appear to conflict with a documented decision? | Active ADR prose reviewed against the change by the model; findings are labeled as inferred and cited |
 | **Backward compatibility** | Does this break existing callers? | Public symbols, contract fields and routes compared against the base revision |
 | **Blast radius** | What else does this reach? | Dependents traversed upward, by hop distance, mapped onto services |
 | **Production risk** | What could fail in a way tests will not catch? | Heuristics over the changed lines: concurrency, removed error handling, changed limits, dropped observability, resource allocation, auth |
@@ -59,25 +59,25 @@ about it:
 | **Review routing** | Who needs to see this? | Ownership records and CODEOWNERS — never inferred from git history |
 
 The verdict is one of **ready to propose**, **needs revision**, or **send to
-design review**. Never "approved" — a human owner approves.
+design review**.
 
 ## Three design decisions worth knowing about
 
 **1. `unknown` is never rolled up as a pass.** If the base revision cannot be
-read, or an ADR points at a path that has moved, or a constraint throws, the
-result is `unknown` and it is reported as such. The scorecard has a "What this
+read, or a check cannot run, the result is `unknown` and it is reported as such. The scorecard has a "What this
 did not check" section that sits *above* the findings rather than in a footer,
 because a reader who stops halfway should have seen the limits of the analysis
 before its conclusions. A confident green on a check that did not run is the
 worst output this tool could produce.
 
-**2. Deterministic checks first; the model judges what they cannot.** The
-dependency graph, the ADR constraints, the contract comparison, the ownership
-lookup and test reachability all run without a model and produce the same result
-every time. The model pass is additive: it reads design *prose* — the integration
-assumptions stated in English and nowhere else — and its findings are badged
-`model`, carry their citations, and are dropped if they cite nothing real. If
-the model is unavailable the assessment still stands, and says so.
+**2. Fixed checks and inferred ADR review stay distinct.** The dependency
+graph, contract comparison, ownership lookup, and test reachability run without
+a model and produce repeatable results. The model also reads ordinary, active
+ADR prose and compares it with the change. Any finding based on that
+interpretation is explicitly marked **Inferred**, cites the ADR passage and
+changed code, and may affect the verdict. The developer can accept or dismiss
+the finding; that choice is saved for this workspace and tied to the cited
+evidence. Inferred review is not deterministic proof.
 
 **3. Not every escalation reason drives the verdict.** The policy says to
 escalate on a design conflict, missing documentation or ownership, uncertain
@@ -85,8 +85,10 @@ compatibility, or a possible production-behaviour change. Taken literally the
 last one fires on nearly every real change, and a tool that routes everything to
 design review is a tool people switch off — which would make the metric worse,
 not better. So all four reasons are recorded and shown, but only a design
-conflict or an unresolved compatibility question moves the verdict. Production
-risk becomes blocking checklist items instead. This calibration is explicit in
+conflict or an unresolved compatibility question routes the change to design
+review. Missing documentation or ownership is surfaced as an unknown/action;
+production-risk signals call for attention rather than automatic design review.
+This calibration is explicit in
 `src/assess/scorecard.ts` rather than buried.
 
 ## What the agent is not allowed to do
@@ -131,7 +133,7 @@ should know that.
    └──────────┬───────────┘         │
               ▼                     │
    ┌──────────────────────┐         │
-   │ constraints/engine   │  six constraint kinds, executed against the diff
+   │ fixed checks         │  graph · compatibility · tests · production risk
    └──────────┬───────────┘         │
               ▼                     │
    ┌──────────────────────┐         │
@@ -146,17 +148,16 @@ should know that.
        ui/diagnostics
 ```
 
-`src/core`, `src/evidence`, `src/constraints` and `src/assess` never import
+`src/core`, `src/evidence` and `src/assess` never import
 `vscode`, so the whole assessment pipeline runs headlessly — which is what lets
 the eval harness exercise the same code path the extension does.
 
-### Layout
+### Codebase Layout
 
 | Path | What is in it |
 | --- | --- |
 | `src/core/` | Graph, scanners (Python + TS/JS), resolvers, diff parsing, config, git/disk I/O |
 | `src/evidence/` | ADR indexing, ownership resolution, test coverage mapping |
-| `src/constraints/` | The constraint engine and its six kinds |
 | `src/assess/` | Blast radius, compatibility, production risk, scorecard assembly, markdown rendering |
 | `src/agents/` | Model access, prompts, the impact pass, the design-review agent, guardrails |
 | `src/ui/` | Scorecard webview, tree views, diagnostics, status bar |
@@ -165,66 +166,26 @@ the eval harness exercise the same code path the extension does.
 | `scenarios/` | Four prepared changes for the evaluation harness |
 | `test/` | Unit tests for the primitives; the scenario eval harness |
 
-## ADRs as executable constraints
+## Reviewing ADRs
 
-This is the mechanism that catches "looks fine in the diff but violates a design
-decision".
+ADRs stay ordinary Markdown, written and maintained by the engineering team.
+Donna does not require a separate Donna-specific JSON block or a new format.
+It reads the status and owners from the document, excludes superseded and
+deprecated ADRs, and gives active ADR prose to the model for review against the
+change.
 
-An ADR stays prose — humans write and read it. The subset of the decision a
-machine can check lives in a fenced ` ```donna ` JSON block:
+An ADR-based model finding is **inferred**, not a deterministic rule result.
+Donna marks it **Inferred**, cites the exact ADR passage and relevant changed
+code, and explains that the conclusion depends on interpretation. Inferred
+conflicts can affect the verdict. The developer can accept the concern or
+dismiss it as a false positive; the choice is stored in the workspace and
+applies only while the cited ADR passage and code evidence remain unchanged.
 
-````markdown
-# ADR-0002: Every HTTP contract change lands with its version record
-
-- **Status:** Accepted
-- **Owners:** @contract-council
-
-## Context
-
-...the reasoning a person needs...
-
-## Enforcement
-
-```donna
-{
-  "id": "ADR-0002",
-  "status": "accepted",
-  "appliesTo": ["vllm/entrypoints/openai/**"],
-  "constraints": [{
-    "id": "contract-change-needs-version-entry",
-    "kind": "contract-change-requires-version",
-    "severity": "blocker",
-    "rationale": "A contract change is invisible in review precisely because it looks additive.",
-    "params": {
-      "surface": ["vllm/entrypoints/openai/**/protocol.py"],
-      "symbolPattern": "class\\s+(\\w*(?:Request|Response)\\w*)",
-      "versionRegistry": ["vllm/entrypoints/openai/api_versions.py"]
-    }
-  }]
-}
-```
-````
-
-An ADR with no block is **unchecked, not unenforced** — it is cited, its prose
-goes to the model pass, and the scorecard's blind spots say it was not verified.
-
-### The six constraint kinds
-
-| Kind | Checks |
-| --- | --- |
-| `forbidden-dependency` | Modules matching `from` must not import (optionally: must not transitively reach) modules matching `to` |
-| `required-reachability` | Every module matching `from` must reach at least one module matching `mustReach` |
-| `contract-change-requires-version` | Touching a declared type or field in `surface` requires a change in `versionRegistry` |
-| `service-public-entry` | Modules outside a service may only import its declared `entry` files |
-| `change-requires-test` | A change matching `when` requires a changed test matching `requireChangedTest` |
-| `required-decorator` | Declarations matching `declPattern` must carry `marker` within `withinLines` above them |
-
-`forbidden-dependency`, `required-reachability` and `service-public-entry` accept
-`allowFrom` to exempt paths — tests being the standard case, since a rule that
-forbids unit-testing an internal module either bans unit tests or gets switched
-off.
-
-`status` is honoured: superseded and deprecated ADRs are not evaluated.
+Fixed code checks—such as dependency analysis, compatibility checks, test
+reachability, and production-risk heuristics—remain separate and repeatable.
+They do not prove that every sentence in an ADR has been satisfied. Donna
+should report ambiguity or missing evidence rather than present an inferred
+reading as deterministic enforcement.
 
 ## Setup
 
@@ -259,8 +220,10 @@ key, no second bill. Set it to `anthropic` and run
 `Donna: Set Anthropic API Key` to call the API directly; the key goes into
 VS Code secret storage, not your settings or your repo.
 
-`donna.llm.trigger` defaults to `onConflict`: the model runs when the
-deterministic checks have found something concrete for it to judge.
+`donna.llm.trigger` defaults to `onConflict`: the model runs when fixed checks
+find something concrete to review, and when active ADRs are available for
+prose-based design review. Set the trigger to `manual` to suppress automatic
+model review.
 
 ### Donna integrations
 
@@ -286,20 +249,10 @@ only read/search tools through Notion workspace MCP controls.
 ## Verification
 
 ```
-$ npm test
 
-All 140 assertions passed.
-
-scenario                       expected                     got                          result
-01-contract-required-field     escalate-to-design-review    escalate-to-design-review    PASS
-02-validation-bypass           escalate-to-design-review    escalate-to-design-review    PASS
-03-additive-optional-field     ready-to-propose             ready-to-propose             PASS
-04-gateway-reaches-scheduler   escalate-to-design-review    escalate-to-design-review    PASS
-
-Pre-PR conflict detection
-  Design conflicts caught before PR:  3/3
-  Clean changes left alone:           1/1
-```
+`npm test` runs the unit assertions and four scenario fixtures. The scenario
+harness checks fixed code-analysis results only; model interpretation of ADR
+prose is covered separately and is never presented as deterministic enforcement.
 
 The scenario harness stands up a real git repository, applies prepared change
 fixtures, and runs the same `assess()` the extension runs against a real
@@ -352,3 +305,69 @@ directory tree.
 ## License
 
 MIT.
+
+## Repository map
+
+```text
+donna/
+├── src/                 The VS Code extension
+├── context-pack/        Example project knowledge for assessments
+├── demo/sandbox/        Example codebase used by the evaluation tests
+├── scenarios/           Sample changes and their expected assessment results
+├── samples/             Human-readable descriptions of the scenarios
+├── test/                Unit tests and the evaluation runner
+├── schemas/             Rules for validating Donna configuration
+├── media/               Extension artwork
+└── package.json, etc.   Extension metadata, build scripts, and TypeScript settings
+```
+
+### How the code fits together
+
+```text
+VS Code starts Donna
+        ↓
+Donna watches for file changes
+        ↓
+It reads the change and gathers project context
+        ↓
+It checks risks and produces a scorecard
+        ↓
+It displays the results in VS Code
+```
+
+- `src/extension.ts` is the VS Code composition root. It wires together the
+  watcher, assessment controller, commands, and result views.
+- `src/assessmentController.ts` prepares and runs assessments, including the
+  optional model pass.
+- `src/commands.ts` registers assessment-related commands and their handlers.
+- `src/watcher.ts` notices saved, created, or deleted files and starts an
+  assessment after changes settle.
+- `src/core/` reads the project and its Git changes, then builds a picture of
+  how the code relates.
+- `src/evidence/` gathers supporting context, such as design decisions,
+  ownership, and relevant tests.
+- `src/assess/` turns the evidence and checks into findings, a verdict, and a
+  scorecard.
+- `src/ui/` displays Donna's results in VS Code.
+- `src/agents/` contains optional model-assisted review and its safety checks.
+- `src/integrations/` connects to external services such as GitHub, Atlassian,
+  and Notion.
+- `src/util/` contains shared helpers, such as logging and debouncing.
+
+### Example and test material
+
+- `context-pack/` contains example reference material Donna can assess against:
+  architecture notes, ADRs (records of design decisions), ownership information,
+  and test expectations.
+- `demo/sandbox/` is a sample project the evaluation harness uses to test
+  Donna.
+- `scenarios/` describes sample changes and what Donna is expected to flag.
+- `samples/` explains those scenarios in a human-readable format.
+- `test/` contains automated checks. The evaluation runner creates temporary
+  local Git repositories; it does not create or host repositories online.
+- `schemas/` defines what Donna's configuration files are allowed to look like.
+
+At a high level, the main path through Donna is
+`src/extension.ts` → `src/watcher.ts` → `src/assessmentController.ts` →
+`src/core/` and `src/evidence/` → `src/assess/` → `src/ui/`, with the model pass
+reviewing active ADR prose when enabled.

@@ -6,12 +6,10 @@
 
 > *Fictional decision, written for the Donna demo. Not vLLM's real architecture.*
 
-> **Note for readers of the Donna demo:** this ADR deliberately has **no
-> `donna` enforcement block.** It is a real design constraint that no
-> mechanical rule can check, and it is here to show what Donna does with
-> that: it cites the decision, hands the prose to the model pass, and records in
-> its blind spots that the constraint was *not* verified. A tool that reported a
-> clean pass on this ADR would be lying.
+> **Note for readers of the Donna demo:** this ADR is ordinary Markdown. Donna
+> may infer whether a code change conflicts with it, but such findings are not
+> deterministic proof. Any finding should cite the relevant ADR passage and
+> changed code, and reviewers can override it.
 
 ## Context
 

@@ -106,6 +106,11 @@
         "icon": "$(check)"
       },
       {
+        "command": "donna.overrideInferredFinding",
+        "title": "Donna: Override Inferred Finding",
+        "icon": "$(edit)"
+      },
+      {
         "command": "donna.initConfig",
         "title": "Donna: Create Config File",
         "icon": "$(new-file)"
@@ -171,7 +176,12 @@
         },
         {
           "command": "donna.acceptFinding",
-          "when": "viewItem =~ /observation/",
+          "when": "viewItem =~ /observation/ && viewItem !~ /inferred/",
+          "group": "9_accept@1"
+        },
+        {
+          "command": "donna.overrideInferredFinding",
+          "when": "viewItem =~ /inferred/",
           "group": "9_accept@1"
         }
       ],
@@ -182,6 +192,11 @@
         },
         {
           "command": "donna.acceptFinding",
+          "when": "false"
+        }
+        ,
+        {
+          "command": "donna.overrideInferredFinding",
           "when": "false"
         }
       ]
@@ -220,7 +235,7 @@
         "donna.llm.enabled": {
           "type": "boolean",
           "default": true,
-          "markdownDescription": "Allow the model pass, which judges design intent written in prose that no mechanical rule can check. Deterministic checks always run regardless."
+          "markdownDescription": "Allow model review of active ADR prose and design intent. ADR interpretations are inferred and cited; fixed code checks always run regardless."
         },
         "donna.llm.trigger": {
           "type": "string",
@@ -232,7 +247,7 @@
           "default": "onConflict",
           "markdownEnumDescriptions": [
             "Only when you run `Donna: Assess With Model Pass`.",
-            "Automatically when the deterministic checks find a conflict or an unchecked constraint, so the model has something concrete to judge. Recommended.",
+            "Automatically when fixed checks find a conflict or an unchecked result, and when active ADRs are available for inferred review. Recommended.",
             "On every settled change. Highest coverage, highest token spend."
           ],
           "description": "When to invoke the model."

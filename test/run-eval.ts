@@ -6,9 +6,8 @@
  * extension runs against a real `git diff`. The extension itself does not
  * apply these edits.
  *
- * It answers the prototype's version of the product metric — of the scenarios
- * that contain a genuine design conflict, how many were caught *before* a PR
- * was opened, and of the ones that do not, how many were left alone.
+ * It evaluates deterministic checks only. ADR prose interpretation is
+ * model-driven and inferred, so it is exercised separately from these fixtures.
  *
  * Usage:
  *   node out-eval/test/run-eval.js            # all scenarios, summary table
@@ -291,33 +290,31 @@ function main(): void {
   }
   console.log();
 
-  // --- The metric ----------------------------------------------------------
-  const conflictScenarios = outcomes.filter(
+  // --- Summary metrics -----------------------------------------------------
+  const escalationScenarios = outcomes.filter(
     (o) => o.scenario.expect.verdict === 'escalate-to-design-review',
   );
   const cleanScenarios = outcomes.filter(
     (o) => o.scenario.expect.verdict === 'ready-to-propose',
   );
-  const caught = conflictScenarios.filter((o) => o.caughtDesignConflict).length;
+  const caught = escalationScenarios.filter((o) => o.caughtDesignConflict).length;
   const falsePositives = cleanScenarios.filter(
     (o) => o.card.verdict.value !== 'ready-to-propose',
   ).length;
 
-  console.log('Pre-PR conflict detection');
-  console.log(
-    `  Design conflicts caught before PR:  ${caught}/${conflictScenarios.length}`,
-  );
+  console.log('Deterministic pre-PR checks');
+  console.log(`  Fixed-check design-conflict signals: ${caught}`);
   console.log(
     `  Clean changes left alone:           ${cleanScenarios.length - falsePositives}/${cleanScenarios.length}`,
   );
   console.log();
   console.log(
-    `  Without the agent, each of those ${conflictScenarios.length} conflicts surfaces in PR review or in a`,
+    `  This harness does not run the model pass or claim that ADR prose is`,
   );
   console.log(
-    `  lead's end-of-week read — i.e. after the PR exists. That is the delta the`,
+    `  deterministically enforced. Inferred ADR findings require a model-backed`,
   );
-  console.log(`  real metric measures.`);
+  console.log(`  assessment covered by dedicated impact-pass tests.`);
   console.log();
 
   const failed = outcomes.filter((o) => o.failures.length > 0);

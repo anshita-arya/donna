@@ -4,7 +4,7 @@
  * The change under assessment is a diff, not a working tree, because the
  * question is "what did this change do" rather than "what does this repo look
  * like". Line-level added/removed text is kept per hunk so the contract and
- * decorator constraints can ask *which lines* moved, not just which files.
+ * code checks can ask *which lines* moved, not just which files.
  */
 
 import type { ChangeSet, ChangedFile, Hunk } from './types';

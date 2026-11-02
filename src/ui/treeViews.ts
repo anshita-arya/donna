@@ -199,6 +199,8 @@ export class AssessmentTreeProvider implements vscode.TreeDataProvider<Node> {
         item.iconPath = ICON[observation.status];
         item.description = [
           observation.source === 'model' ? 'model' : undefined,
+          observation.inferred ? 'inferred from ADR prose' : undefined,
+          observation.override ? `override: ${observation.override}` : undefined,
           observation.confidence !== 'high' ? `${observation.confidence} confidence` : undefined,
           observation.location
             ? `${observation.location.file.split('/').pop()}:${observation.location.line}`
@@ -211,6 +213,11 @@ export class AssessmentTreeProvider implements vscode.TreeDataProvider<Node> {
         tooltip.appendMarkdown(`**${observation.title}**\n\n${observation.detail}\n\n`);
         tooltip.appendMarkdown(`*Check:* \`${observation.checkId}\`\n\n`);
         tooltip.appendMarkdown(`*Confidence:* ${observation.confidence}\n\n`);
+        if (observation.inferred) {
+          tooltip.appendMarkdown(
+            `**Inferred from ADR prose.** This is an interpretation, not a deterministic rule result. Use the item action to accept, dismiss, or clear a saved override.\n\n`,
+          );
+        }
         if (observation.escalate) {
           tooltip.appendMarkdown(`*Escalates:* ${ESCALATION_LABELS[observation.escalate]}\n\n`);
         }
@@ -231,6 +238,8 @@ export class AssessmentTreeProvider implements vscode.TreeDataProvider<Node> {
           'observation',
           observation.location ? 'locatable' : '',
           observation.status,
+          observation.inferred ? 'inferred' : '',
+          observation.override ? `override-${observation.override}` : '',
         ]
           .filter(Boolean)
           .join(' ');

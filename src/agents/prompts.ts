@@ -18,6 +18,7 @@
 import { budget } from './model';
 import type { AdrDocument, ChangeSet, DonnaConfig, Observation, Scorecard } from '../core/types';
 import type { ExternalContext } from '../integrations/mcp';
+import { isActive } from '../evidence/adr';
 
 const SHARED_RULES = `
 Rules you must follow:
@@ -25,6 +26,9 @@ Rules you must follow:
 1. Cite or stay silent. Every observation must cite something you were given:
    an ADR id, a file path from the diff, a service name from the service map,
   a test path, or an external-context reference. If you cannot cite it, do not report it.
+   When interpreting ADR prose, label the observation as inferred, quote the exact
+   ADR passage verbatim, and cite at least one changed file that demonstrates the
+   behavior. Never describe a prose interpretation as a deterministic check.
 2. Say "unknown" when you do not know. A developer acting on a confident wrong
    answer is the exact failure this tool exists to prevent. "unknown" with a
    clear reason is a useful result; a guess dressed as a finding is not.
@@ -45,15 +49,10 @@ function formatAdrs(adrs: AdrDocument[], charBudget: number): string {
   const perAdr = Math.max(600, Math.floor(charBudget / Math.max(1, adrs.length)));
   return adrs
     .map((adr) => {
-      const checked = adr.constraints.length
-        ? `Automatically checked parts of this ADR: ${adr.constraints.map((c) => `${c.id} (${c.kind})`).join(', ')}. Do not re-report these — judge the prose instead.`
-        : 'This ADR has no automatically checkable constraints, so its prose is the only thing governing the change. Read it carefully.';
-
       return [
         `### ${adr.id} — ${adr.title}`,
         `Status: ${adr.status}. Owners: ${adr.owners.join(', ') || 'unrecorded'}. Source: ${adr.path}`,
-        `Scope: ${adr.appliesTo.length ? adr.appliesTo.join(', ') : 'repository-wide'}`,
-        checked,
+        'This is ordinary team-authored ADR prose. Determine whether it applies from its contents; do not assume unrelated ADRs govern the change.',
         '',
         budget(adr.body, perAdr, `${adr.id} body truncated`),
       ].join('\n');
@@ -122,12 +121,11 @@ pass, and you never rewrite or reinterpret an architecture decision to make a
 change fit. When a change conflicts with a documented decision, your job is to
 name the conflict and route it to the decision's owners.
 
-The deterministic checks — dependency graph, ADR constraints with machine-checkable
-rules, contract comparison against the base revision, ownership lookup, test
-reachability — have already run. Your value is the part they cannot do: reading
-architecture and design prose and judging whether this change is consistent with
-the intent behind it, including integration assumptions that are stated in
-English and nowhere else.
+The fixed code checks — dependency graph, contract comparison against the base
+revision, ownership lookup, and test reachability — have already run. Your value
+is interpreting existing architecture and design prose and judging whether this
+change is consistent with its intent. Such ADR interpretations are inferred
+judgments, not deterministic rule results.
 
 ${SHARED_RULES}
 
@@ -141,7 +139,7 @@ Respond with JSON only, matching this shape:
       "confidence": "high" | "medium" | "low",
       "title": "under 70 characters, lowercase, no trailing period",
       "detail": "two to four sentences: what you found, why it matters, what would go wrong",
-      "citations": [{ "kind": "adr" | "diff" | "service-map" | "tests" | "external-context", "ref": "ADR-0002, a file path, or an MCP reference", "note": "why this supports the finding" }],
+      "citations": [{ "kind": "adr" | "diff" | "service-map" | "tests" | "external-context", "ref": "ADR-0002, a changed file path, or an MCP reference", "excerpt": "for ADRs, an exact verbatim passage; for diffs, the exact changed line", "line": 123, "note": "why this supports the finding" }],
       "requiredActions": ["imperative, specific, addressed to the developer"],
       "escalate": "design-conflict" | "compat-uncertain" | "production-behavior-change" | "missing-documentation" | null,
       "file": "repo-relative path or null",
@@ -164,7 +162,8 @@ export function buildImpactPrompt(args: {
   maxFiles: number;
   externalContext?: ExternalContext[];
 }): string {
-  const { change, adrs, config, staticObservations, maxFiles, externalContext = [] } = args;
+  const { change, config, staticObservations, maxFiles, externalContext = [] } = args;
+  const adrs = args.adrs.filter(isActive);
 
   const externalBlock = externalContext.length
     ? externalContext
@@ -178,7 +177,7 @@ export function buildImpactPrompt(args: {
     '',
     formatDiff(change, maxFiles, 18_000),
     '',
-    `## Architecture decision records that govern the changed paths`,
+    `## Active architecture decision records`,
     '',
     formatAdrs(adrs, 12_000),
     '',
@@ -197,9 +196,9 @@ export function buildImpactPrompt(args: {
     '',
     `## Your task`,
     '',
-    `Judge this change against the design intent in the records above — especially the parts that no automated rule covers.`,
-    `Look for: integration assumptions the change violates, a seam put in the wrong place, state or ownership moved across a boundary the ADRs care about, a decision that is honoured in letter but not in substance, and anything the records imply the change should also have done but did not.`,
-    `If an ADR's prose is ambiguous about this case, that is an "unknown" with "missing-documentation", not a pass.`,
+    `Determine which records apply to the changed paths by reading their ordinary prose. Compare every applicable decision with the change, not only explicit "MUST" statements.`,
+    `Any finding based on interpreting ADR prose is inferred, not deterministic. Cite the exact ADR passage verbatim (including its line number) and at least one relevant changed line. Never report an inferred concern as a mechanically proven violation.`,
+    `If an ADR's applicability or meaning is ambiguous, report an inferred "unknown" with a clear explanation instead of claiming a pass.`,
     '',
     `Respond with JSON only.`,
   ].join('\n');

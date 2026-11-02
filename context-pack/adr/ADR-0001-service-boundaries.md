@@ -59,31 +59,3 @@ We accept that some genuinely harmless reads will be blocked by this rule and
 will have to be routed through the facade. The alternative — a rule that admits
 "harmless" reads — requires someone to adjudicate harmlessness on every change,
 and that is the process that already failed twice.
-
-## Enforcement
-
-```donna
-{
-  "id": "ADR-0001",
-  "status": "accepted",
-  "owners": ["@platform-eng", "@svc-engine-core"],
-  "appliesTo": [
-    "vllm/entrypoints/**",
-    "vllm/v1/core/**",
-    "vllm/v1/executor/**"
-  ],
-  "constraints": [
-    {
-      "id": "gateway-must-not-reach-past-engine",
-      "kind": "forbidden-dependency",
-      "severity": "blocker",
-      "rationale": "The gateway reaching into the scheduler or the executor is the import that caused both prior incidents. It must go through the engine facade instead.",
-      "params": {
-        "from": ["vllm/entrypoints/**"],
-        "to": ["vllm/v1/core/**", "vllm/v1/executor/**", "vllm/v1/worker/**"],
-        "transitive": false
-      }
-    }
-  ]
-}
-```

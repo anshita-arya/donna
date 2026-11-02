@@ -26,16 +26,11 @@
   ],
 
   "expect": {
-    "verdict": "escalate-to-design-review",
+    "verdict": "needs-revision",
     "mustFlag": [
-      "adr-constraint:ADR-0003/serving-handlers-reach-the-gate",
-      "adr-constraint:ADR-0003/routes-declare-json-validation",
-      "adr-constraint:ADR-0007/validation-change-needs-validation-test"
+      "tests/expectation-unmet"
     ],
-    "mustNotFlag": [
-      "adr-constraint:ADR-0002/contract-change-needs-version-entry",
-      "adr-constraint:ADR-0000/handlers-validate-locally"
-    ],
-    "notes": "The second scenario from the brief: required validation bypassed before inference requests are routed. Note that the completion handler still reaches the gate, so the reachability check must flag the chat handler specifically rather than the whole glob."
+    "mustNotFlag": [],
+    "notes": "The deterministic harness checks fixed test and compatibility findings. Interpreting ADR prose is handled by the model pass and is not represented as a deterministic rule result."
   }
 }

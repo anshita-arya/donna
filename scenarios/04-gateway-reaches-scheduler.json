@@ -23,15 +23,10 @@
   "expect": {
     "verdict": "escalate-to-design-review",
     "mustFlag": [
-      "adr-constraint:ADR-0001/gateway-must-not-reach-past-engine",
-      "adr-constraint:ADR-0005/scheduler-consumed-through-entry",
-      "blast-radius/new-cross-service-edge"
+      "blast-radius/new-cross-service-edge",
+      "tests/expectation-unmet"
     ],
-    "mustNotFlag": [
-      "adr-constraint:ADR-0002/contract-change-needs-version-entry",
-      "adr-constraint:ADR-0003/serving-handlers-reach-the-gate",
-      "adr-constraint:ADR-0000/handlers-validate-locally"
-    ],
-    "notes": "The validation gate is still reached in this scenario, so ADR-0003 must stay quiet — it checks that the reachability rule is precise rather than firing on any change to serving.py."
+    "mustNotFlag": [],
+    "notes": "The deterministic harness checks fixed graph and test findings. ADR prose is evaluated separately as inferred model review."
   }
 }

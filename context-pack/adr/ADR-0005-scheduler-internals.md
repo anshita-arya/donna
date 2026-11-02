@@ -45,35 +45,3 @@ unit testing, or gets turned off.
 `SchedulerInterface` becomes the thing we have to be careful about, and it is
 listed as a compatibility surface for that reason. In exchange, everything behind
 it is genuinely free to change, which is what the retune cadence requires.
-
-## Enforcement
-
-```donna
-{
-  "id": "ADR-0005",
-  "status": "accepted",
-  "owners": ["@svc-scheduler", "@svc-engine-core"],
-  "appliesTo": [
-    "vllm/v1/core/**",
-    "vllm/v1/engine/**",
-    "vllm/entrypoints/**"
-  ],
-  "constraints": [
-    {
-      "id": "scheduler-consumed-through-entry",
-      "kind": "service-public-entry",
-      "severity": "blocker",
-      "rationale": "External callers of the scheduler's internals are constraints on the next retune; four of them turned a simple block-accounting change into three weeks.",
-      "params": {
-        "service": "scheduler",
-        "entry": [
-          "vllm/v1/core/sched/__init__.py",
-          "vllm/v1/core/sched/interface.py",
-          "vllm/v1/core/__init__.py"
-        ],
-        "allowFrom": ["tests/**"]
-      }
-    }
-  ]
-}
-```

@@ -13,8 +13,8 @@
  *    which would make the metric worse rather than better. So all four reasons
  *    are *recorded and shown*, but only a design conflict or an unresolved
  *    compatibility question moves the verdict to `escalate-to-design-review`.
- *    Production-behaviour risk becomes blocking checklist items the developer
- *    must answer in the PR description instead.
+ *    Production-behaviour risk is recorded for reviewer attention rather than
+ *    automatically escalating every change.
  *
  * 2. **`unknown` is never rolled up as `pass`.** A dimension containing an
  *    unknown reports `unknown`, and the blind-spot list says why. The point of
@@ -27,7 +27,6 @@ import { AGENT_LIMITS } from '../core/config';
 import type {
   AssessmentInput,
   ChecklistItem,
-  ConstraintResult,
   Dimension,
   DimensionScore,
   Escalation,
@@ -43,8 +42,7 @@ import type {
 import { analyzeBlast } from './blast';
 import { analyzeCompat } from './compat';
 import { analyzeRisk } from './risk';
-import { runConstraints } from '../constraints/engine';
-import { isActive, undocumentedPaths } from '../evidence/adr';
+import { isActive } from '../evidence/adr';
 import { analyzeTests, buildTestCoverage, type TestExpectation } from '../evidence/tests';
 
 export interface AssessOptions {
@@ -67,49 +65,19 @@ const STATUS_RANK: Record<ObservationStatus, number> = {
 };
 
 /** A dimension takes the worst status it contains, with `unknown` above `attention`. */
-function rollUp(observations: Observation[]): ObservationStatus {
-  if (observations.length === 0) return 'pass';
-  let worst: ObservationStatus = 'pass';
-  for (const o of observations) {
-    if (STATUS_RANK[o.status] < STATUS_RANK[worst]) worst = o.status;
-  }
-  return worst;
+function effectiveStatus(observation: Observation): ObservationStatus {
+  return observation.inferred && observation.override ? 'pass' : observation.status;
 }
 
-function constraintToObservation(result: ConstraintResult): Observation {
-  const status: ObservationStatus =
-    result.status === 'conflict' ? 'conflict' : result.status === 'unknown' ? 'unknown' : 'pass';
-
-  return {
-    id: findingId('adr-constraint', [
-      result.adrId,
-      result.constraint.id,
-      result.location?.file ?? '',
-      result.message.slice(0, 80),
-    ]),
-    dimension: 'design-conformance',
-    checkId: `adr-constraint:${result.adrId}/${result.constraint.id}`,
-    status,
-    confidence: status === 'unknown' ? 'low' : 'high',
-    title:
-      status === 'conflict'
-        ? `${result.adrId}: ${result.constraint.id}`
-        : status === 'unknown'
-          ? `${result.adrId}: ${result.constraint.id} could not be checked`
-          : `${result.adrId}: ${result.constraint.id} holds`,
-    detail: [result.message, result.constraint.rationale].filter(Boolean).join(' '),
-    evidence: result.evidence,
-    source: 'static',
-    requiredActions: result.requiredActions,
-    escalate:
-      status === 'conflict'
-        ? 'design-conflict'
-        : status === 'unknown'
-          ? 'missing-documentation'
-          : undefined,
-    owners: result.owners,
-    location: result.location,
-  };
+function rollUp(observations: Observation[]): ObservationStatus {
+  const active = observations.filter((observation) => !observation.inferred || !observation.override);
+  if (active.length === 0) return 'pass';
+  let worst: ObservationStatus = 'pass';
+  for (const o of active) {
+    const status = effectiveStatus(o);
+    if (STATUS_RANK[status] < STATUS_RANK[worst]) worst = status;
+  }
+  return worst;
 }
 
 function testsToObservations(
@@ -290,9 +258,14 @@ function reviewRouting(args: {
     }
   }
 
-  // ADR owners, when their decision is in conflict.
+  // ADR owners, when a static or inferred finding cites their decision.
   for (const observation of conflicted) {
-    const adrId = /^adr-constraint:([^/]+)/.exec(observation.checkId)?.[1];
+    const adrId =
+      /^adr-constraint:([^/]+)/.exec(observation.checkId)?.[1] ??
+      observation.evidence
+        .find((evidence) => evidence.kind === 'adr')
+        ?.ref.match(/\bADR-\d{1,4}\b/i)?.[0]
+        .toUpperCase();
     const owners = adrId ? (adrOwners.get(adrId) ?? observation.owners) : observation.owners;
     for (const handle of owners) {
       add({
@@ -367,17 +340,20 @@ function reviewRouting(args: {
 // ---------------------------------------------------------------------------
 
 function decideVerdict(observations: Observation[]): { value: Verdict; rationale: string } {
-  const conflicts = observations.filter((o) => o.status === 'conflict');
+  const active = observations.filter((o) => !o.inferred || !o.override);
+  const conflicts = active.filter((o) => o.status === 'conflict');
   const designConflicts = conflicts.filter((o) => o.escalate === 'design-conflict');
+  const inferredDesignConflicts = designConflicts.filter((o) => o.inferred);
+  const confirmedDesignConflicts = designConflicts.filter((o) => !o.inferred);
   const compatUncertain = observations.filter(
-    (o) => o.escalate === 'compat-uncertain' && o.status !== 'pass',
+    (o) => (!o.inferred || !o.override) && o.escalate === 'compat-uncertain' && o.status !== 'pass',
   );
-  const unknowns = observations.filter((o) => o.status === 'unknown');
+  const unknowns = active.filter((o) => o.status === 'unknown');
 
-  if (designConflicts.length > 0) {
+  if (confirmedDesignConflicts.length > 0) {
     const adrs = [
       ...new Set(
-        designConflicts
+        confirmedDesignConflicts
           .map((o) => /^adr-constraint:([^/]+)/.exec(o.checkId)?.[1])
           .filter((x): x is string => !!x),
       ),
@@ -385,9 +361,23 @@ function decideVerdict(observations: Observation[]): { value: Verdict; rationale
     return {
       value: 'escalate-to-design-review',
       rationale:
-        `${designConflicts.length} documented design decision${designConflicts.length === 1 ? '' : 's'}${adrs.length ? ` (${adrs.join(', ')})` : ''} ` +
-        `conflict${designConflicts.length === 1 ? 's' : ''} with this change. That is not something to resolve in PR review — ` +
+        `${confirmedDesignConflicts.length} documented design decision${confirmedDesignConflicts.length === 1 ? '' : 's'}${adrs.length ? ` (${adrs.join(', ')})` : ''} ` +
+        `conflict${confirmedDesignConflicts.length === 1 ? 's' : ''} with this change. That is not something to resolve in PR review — ` +
         `the decision's owners need to either amend the decision or the change needs reworking first.`,
+    };
+  }
+
+  if (inferredDesignConflicts.length > 0) {
+    const adrs = [
+      ...new Set(inferredDesignConflicts.flatMap((o) =>
+        o.evidence.filter((e) => e.kind === 'adr').map((e) => e.ref.split(' — ')[0]),
+      )),
+    ];
+    return {
+      value: 'escalate-to-design-review',
+      rationale:
+        `Donna inferred ${inferredDesignConflicts.length} possible conflict${inferredDesignConflicts.length === 1 ? '' : 's'} from ADR prose` +
+        `${adrs.length ? ` (${adrs.join(', ')})` : ''}. This is a model interpretation, not a deterministic rule violation; review the cited ADR passage and code evidence, then confirm or override the finding.`,
     };
   }
 
@@ -418,20 +408,20 @@ function decideVerdict(observations: Observation[]): { value: Verdict; rationale
     };
   }
 
-  const attention = observations.filter((o) => o.status === 'attention');
+  const attention = active.filter((o) => o.status === 'attention');
   return {
     value: 'ready-to-propose',
     rationale:
       attention.length > 0
-        ? `No conflicts and no unchecked constraints. ${attention.length} item${attention.length === 1 ? '' : 's'} need${attention.length === 1 ? 's' : ''} a sentence in the PR description rather than a code change. A human owner still has to approve.`
-        : `No conflicts, no unchecked constraints, no risk signals. A human owner still has to approve.`,
+        ? `No conflicts and no unchecked checks. ${attention.length} item${attention.length === 1 ? '' : 's'} need${attention.length === 1 ? 's' : ''} reviewer attention, but do not block the change. A human owner still has to approve.`
+        : `No conflicts, no unchecked checks, no risk signals. A human owner still has to approve.`,
   };
 }
 
 function buildEscalations(observations: Observation[]): Escalation[] {
   const grouped = new Map<EscalationReason, Observation[]>();
   for (const o of observations) {
-    if (!o.escalate || o.status === 'pass') continue;
+    if (!o.escalate || o.status === 'pass' || (o.inferred && o.override)) continue;
     const list = grouped.get(o.escalate) ?? [];
     list.push(o);
     grouped.set(o.escalate, list);
@@ -465,6 +455,7 @@ function buildChecklist(observations: Observation[]): ChecklistItem[] {
   const items = new Map<string, ChecklistItem>();
 
   for (const o of observations) {
+    if (o.inferred && o.override) continue;
     if (o.status === 'pass' && o.requiredActions.length === 0) continue;
     for (const action of o.requiredActions) {
       const id = findingId('checklist', [o.dimension, action]);
@@ -492,10 +483,8 @@ export function assess(input: AssessmentInput, options: AssessOptions = {}): Sco
   const maxDepth = options.maxDepth ?? 3;
 
   const blast = analyzeBlast(input, maxDepth);
-  const scope = { changed: input.change.paths, affected: blast.radius.all };
-
-  const { results: constraintResults, consideredAdrs, skipped } = runConstraints(input, scope);
-  const designObservations = constraintResults.map(constraintToObservation);
+  const activeAdrs = input.adrs.filter(isActive);
+  const designObservations: Observation[] = [];
 
   const compat = analyzeCompat(input);
   const risk = analyzeRisk(input, blast.radius.all);
@@ -511,41 +500,7 @@ export function assess(input: AssessmentInput, options: AssessOptions = {}): Sco
   });
   const testObservations = testsToObservations(input, testAnalysis, blast.radius.all.size);
 
-  // Missing design documentation for changed areas.
-  //
-  // Only production code counts. Test files and non-code files are excluded
-  // because almost no ADR scopes itself to `tests/**`, so including them would
-  // make "governed by no ADR" fire on essentially every change — and a signal
-  // that always fires is one developers learn to scroll past. Tests have their
-  // own governance through ADR-0007-style constraints and test expectations.
-  const undocumented = undocumentedPaths(input.adrs, input.change.paths).filter(
-    (p) => input.graph.nodes.has(p) && !input.graph.nodes.get(p)!.isTest,
-  );
-  if (undocumented.length > 0 && input.adrs.some(isActive)) {
-    designObservations.push({
-      id: findingId('design-undocumented', undocumented.sort()),
-      dimension: 'design-conformance',
-      checkId: 'design/no-governing-adr',
-      status: 'unknown',
-      confidence: 'high',
-      title: `${undocumented.length} changed path${undocumented.length === 1 ? '' : 's'} ${undocumented.length === 1 ? 'is' : 'are'} governed by no ADR`,
-      detail:
-        `${undocumented.slice(0, 5).map((p) => `\`${p}\``).join(', ')}${undocumented.length > 5 ? `, +${undocumented.length - 5} more` : ''} ` +
-        `fall outside every active ADR's scope. That might mean the area is genuinely unconstrained, or it might mean the governing decision was never written down — ` +
-        `which is the case where a conflict only surfaces in a lead's review later.`,
-      evidence: undocumented.slice(0, 5).map<Evidence>((p) => ({
-        kind: 'diff',
-        ref: p,
-        note: 'no ADR covers this path',
-      })),
-      source: 'static',
-      requiredActions: [
-        'Ask whoever owns this area whether an unwritten design constraint applies before you open the PR.',
-      ],
-      escalate: 'missing-documentation',
-      owners: [],
-    });
-  } else if (input.adrs.length === 0) {
+  if (activeAdrs.length === 0) {
     designObservations.push({
       id: findingId('design-no-adrs', ['none']),
       dimension: 'design-conformance',
@@ -571,11 +526,13 @@ export function assess(input: AssessmentInput, options: AssessOptions = {}): Sco
     ...(options.modelObservations ?? []),
   ].filter((o) => !input.config.accepted.includes(o.id));
 
-  const adrOwners = new Map(consideredAdrs.map((a) => [a.id, a.owners]));
+  const adrOwners = new Map(activeAdrs.map((a) => [a.id, a.owners]));
   const routing = reviewRouting({
     input,
     blastServices: blast.services,
-    conflicted: allBeforeRouting.filter((o) => o.status === 'conflict'),
+    conflicted: allBeforeRouting.filter(
+      (o) => o.status === 'conflict' && !(o.inferred && o.override),
+    ),
     adrOwners,
   });
 
@@ -612,17 +569,9 @@ export function assess(input: AssessmentInput, options: AssessOptions = {}): Sco
   // are not recomputed here — doing both listed every malformed ADR twice.
   const blindSpots: string[] = [...(options.loadIssues ?? [])];
 
-  const proseOnly = consideredAdrs.filter((a) => a.constraints.length === 0);
-  if (proseOnly.length > 0) {
+  if (activeAdrs.length > 0 && !options.modelPass?.ran) {
     blindSpots.push(
-      `${proseOnly.length} relevant ADR${proseOnly.length === 1 ? '' : 's'} (${proseOnly.map((a) => a.id).join(', ')}) ` +
-        `${proseOnly.length === 1 ? 'has' : 'have'} no machine-checkable constraints — ${proseOnly.length === 1 ? 'its' : 'their'} prose was ` +
-        `${options.modelPass?.ran ? 'handed to the model pass' : 'not evaluated, because the model pass did not run'}.`,
-    );
-  }
-  if (skipped.length > 0) {
-    blindSpots.push(
-      `${skipped.length} active ADR${skipped.length === 1 ? '' : 's'} ${skipped.length === 1 ? 'was' : 'were'} skipped as out of scope for the changed paths. If one of them governs this area, its \`appliesTo\` globs are wrong.`,
+      `The model pass did not review active ADR prose (${activeAdrs.map((a) => a.id).join(', ')}). Design conformance based on ADR interpretation is unchecked.`,
     );
   }
   if (blast.radius.truncated) {
@@ -701,10 +650,11 @@ function dedupeTests(requirements: TestRequirement[]): TestRequirement[] {
 
 function summarize(dimension: Dimension, observations: Observation[], status: ObservationStatus): string {
   const counts = {
-    conflict: observations.filter((o) => o.status === 'conflict').length,
-    unknown: observations.filter((o) => o.status === 'unknown').length,
-    attention: observations.filter((o) => o.status === 'attention').length,
-    pass: observations.filter((o) => o.status === 'pass').length,
+    conflict: observations.filter((o) => effectiveStatus(o) === 'conflict').length,
+    unknown: observations.filter((o) => effectiveStatus(o) === 'unknown').length,
+    attention: observations.filter((o) => effectiveStatus(o) === 'attention').length,
+    pass: observations.filter((o) => effectiveStatus(o) === 'pass').length,
+    overridden: observations.filter((o) => o.inferred && o.override).length,
   };
 
   if (observations.length === 0) return 'Nothing to report.';
@@ -713,6 +663,7 @@ function summarize(dimension: Dimension, observations: Observation[], status: Ob
   if (counts.conflict) parts.push(`${counts.conflict} conflict${counts.conflict === 1 ? '' : 's'}`);
   if (counts.unknown) parts.push(`${counts.unknown} unchecked`);
   if (counts.attention) parts.push(`${counts.attention} to note`);
+  if (counts.overridden) parts.push(`${counts.overridden} inferred override${counts.overridden === 1 ? '' : 's'}`);
   if (counts.pass && parts.length === 0) parts.push(`${counts.pass} check${counts.pass === 1 ? '' : 's'} passed`);
 
   const lead =

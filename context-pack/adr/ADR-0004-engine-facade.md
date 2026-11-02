@@ -41,34 +41,3 @@ Some callers will want a fact the facade does not expose and will have to ask
 for it. Each of those requests is a chance to ask whether the caller should know
 that fact at all — which is the question that the four call sites reading the
 admission counter never got asked.
-
-## Enforcement
-
-```donna
-{
-  "id": "ADR-0004",
-  "status": "accepted",
-  "owners": ["@svc-engine-core"],
-  "appliesTo": [
-    "vllm/v1/engine/**",
-    "vllm/entrypoints/**",
-    "vllm/renderers/**"
-  ],
-  "constraints": [
-    {
-      "id": "engine-consumed-through-facade",
-      "kind": "service-public-entry",
-      "severity": "blocker",
-      "rationale": "Importing engine internals turns every internal signature into an unagreed contract, which is what froze admission control for a quarter.",
-      "params": {
-        "service": "engine-core",
-        "entry": [
-          "vllm/v1/engine/async_llm.py",
-          "vllm/v1/engine/__init__.py"
-        ],
-        "allowFrom": ["tests/**"]
-      }
-    }
-  ]
-}
-```

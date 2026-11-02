@@ -5,7 +5,7 @@
  * proves the pieces underneath behave on the cases that are easy to get wrong
  * and hard to notice: a `#` inside a Python string, a docstring containing an
  * import example, dependency direction, CODEOWNERS precedence, and a superseded
- * ADR still carrying constraints.
+ * ADR status and Markdown parsing.
  *
  * No test framework — a few hundred lines of assertions with no dependency is
  * the right trade for a prototype, and it runs anywhere Node does.
@@ -24,6 +24,9 @@ import { checkChangeRequest, validateEditAgainstFile } from '../src/agents/guard
 import { resolveConfig } from '../src/core/config';
 import { findingId } from '../src/core/id';
 import { buildSearchArguments, isReadOnlySearchTool } from '../src/integrations/tools';
+import { runImpactPass } from '../src/agents/impact';
+import { assess } from '../src/assess/scorecard';
+import type { AssessmentInput, ChangeSet, GraphSnapshot } from '../src/core/types';
 
 let passed = 0;
 const failures: string[] = [];
@@ -460,31 +463,7 @@ group('ADR parsing');
     '',
     '## Decision',
     '',
-    'Prose that a machine cannot check.',
-    '',
-    '## Enforcement',
-    '',
-    '```donna',
-    JSON.stringify(
-      {
-        id: 'ADR-0002',
-        status: 'accepted',
-        owners: ['@contract-council'],
-        appliesTo: ['vllm/entrypoints/**'],
-        constraints: [
-          {
-            id: 'needs-version',
-            kind: 'contract-change-requires-version',
-            severity: 'blocker',
-            rationale: 'because',
-            params: { surface: ['x/**'], versionRegistry: ['v.py'] },
-          },
-        ],
-      },
-      null,
-      2,
-    ),
-    '```',
+    'A change to a contract model and its entry in the version registry land in the same change.',
   ].join('\n');
 
   const { doc, issues } = parseAdr('adr/ADR-0002.md', adr);
@@ -492,28 +471,18 @@ group('ADR parsing');
   eq('id normalized', doc?.id, 'ADR-0002');
   eq('title strips the id prefix', doc?.title, 'Contracts are versioned');
   eq('status read', doc?.status, 'accepted');
-  eq('one constraint', doc?.constraints.length, 1);
-  eq('constraint kind', doc?.constraints[0].kind, 'contract-change-requires-version');
-  check('owners merge block and prose', (doc?.owners ?? []).includes('@svc-api-gateway'));
-  check('prose body retained for the model pass', (doc?.body ?? '').includes('Prose that a machine cannot check'));
-  check('fenced block stripped from the body', !(doc?.body ?? '').includes('donna'));
+  check('parsed document contains no Donna-specific rules', doc !== null);
+  eq('owners are read from ADR prose', doc?.owners, ['@contract-council', '@svc-api-gateway']);
+  check('full ADR text is retained for review', (doc?.body ?? '').includes('A change to a contract model'));
   check('accepted ADR is active', doc ? isActive(doc) : false);
+  check('ADR without explicit path metadata is treated as potentially relevant',
+    doc ? relevantAdrs([doc], ['any/changed-file.py']).length === 1 : false);
 }
 
 {
   const superseded = [
     '# ADR-0000: Old decision',
     '- **Status:** Superseded',
-    '```donna',
-    JSON.stringify({
-      id: 'ADR-0000',
-      status: 'superseded',
-      appliesTo: ['**'],
-      constraints: [
-        { id: 'retired', kind: 'forbidden-dependency', severity: 'blocker', rationale: '', params: { from: ['a/**'], to: ['b/**'] } },
-      ],
-    }),
-    '```',
   ].join('\n');
 
   const { doc } = parseAdr('adr/ADR-0000.md', superseded);
@@ -524,16 +493,16 @@ group('ADR parsing');
 {
   const broken = ['# ADR-0009: Broken', '```donna', '{ not json at all', '```'].join('\n');
   const { doc, issues } = parseAdr('adr/ADR-0009.md', broken);
-  check('malformed block is reported', issues.some((i) => i.message.includes('not valid JSON')));
+  eq('Donna-looking fenced text is ordinary Markdown', issues.length, 0);
   check('document still parses so it can be cited', doc?.id === 'ADR-0009');
-  eq('no constraints from a broken block', doc?.constraints.length, 0);
+  check('no JSON block is parsed as a rule object', doc !== null);
 }
 
 {
   const noBlock = ['# ADR-0008: Prose only', '- **Status:** Accepted', '', 'Design intent in English.'].join('\n');
   const { doc, issues } = parseAdr('adr/ADR-0008.md', noBlock);
-  check('prose-only ADR is reported as unchecked', issues.some((i) => i.message.includes('nothing in this ADR can be checked')));
-  eq('prose-only ADR has no constraints', doc?.constraints.length, 0);
+  eq('plain prose ADR has no parser warnings', issues.length, 0);
+  check('plain ADR prose is retained', (doc?.body ?? '').includes('Design intent in English.'));
   check('prose-only ADR with no scope is treated as repo-wide', relevantAdrs(doc ? [doc] : [], ['anything.py']).length === 1);
 }
 
@@ -704,11 +673,136 @@ eq(
 
 // ---------------------------------------------------------------------------
 
-console.log(`\n${'='.repeat(60)}`);
-if (failures.length === 0) {
-  console.log(`All ${passed} assertions passed.`);
-} else {
-  console.log(`${passed} passed, ${failures.length} FAILED:\n`);
-  for (const failure of failures) console.log(`  - ${failure}`);
-  process.exitCode = 1;
+async function testInferredAdrReview(): Promise<void> {
+  group('inferred ADR review');
+
+  const adrExcerpt = 'The gateway must use the engine facade.';
+  const changedLine = 'scheduler.check_budget(request)';
+  const adr = {
+    id: 'ADR-0012',
+    title: 'Gateway uses engine facade',
+    status: 'accepted',
+    path: 'docs/adr/ADR-0012.md',
+    owners: ['@engine-team'],
+    body: `# ADR-0012: Gateway uses engine facade\n\n${adrExcerpt}`,
+  };
+  const change: ChangeSet = {
+    baseRef: 'main',
+    headRef: 'feature',
+    branch: 'feature',
+    paths: new Set(['src/gateway.py']),
+    files: [{
+      path: 'src/gateway.py',
+      kind: 'modified',
+      added: 1,
+      removed: 0,
+      hunks: [{
+        newStart: 10,
+        newLines: 1,
+        oldStart: 10,
+        oldLines: 0,
+        addedLines: [{ line: 10, text: changedLine }],
+        removedLines: [],
+      }],
+    }],
+  };
+  const config = resolveConfig({}, '/repo');
+  const response = (adrQuote: string, diffQuote: string) => JSON.stringify({
+    observations: [{
+      dimension: 'design-conformance',
+      status: 'conflict',
+      confidence: 'high',
+      title: 'gateway bypasses the engine facade',
+      detail: 'The new call bypasses the agreed boundary and couples the gateway to scheduler policy.',
+      citations: [
+        { kind: 'adr', ref: 'ADR-0012', excerpt: adrQuote },
+        { kind: 'diff', ref: 'src/gateway.py', excerpt: diffQuote, line: 10 },
+      ],
+      requiredActions: ['Route this operation through the engine facade.'],
+      escalate: 'design-conflict',
+      file: 'src/gateway.py',
+      line: 10,
+    }],
+  });
+  const run = (content: string) => runImpactPass({
+    client: {
+      provider: 'test',
+      model: 'fixture',
+      complete: async () => content,
+    },
+    change,
+    adrs: [adr],
+    config,
+    staticObservations: [],
+    maxFiles: 8,
+  });
+
+  const verified = await run(response(adrExcerpt, changedLine));
+  eq('model pass runs on valid JSON', verified.modelPass.ran, true);
+  eq('ADR interpretation is marked inferred', verified.observations[0]?.inferred, true);
+  eq('exact ADR excerpt is cited', verified.observations[0]?.evidence.find((item) => item.kind === 'adr')?.excerpt, adrExcerpt);
+  eq('changed line is cited', verified.observations[0]?.evidence.find((item) => item.kind === 'diff')?.excerpt, changedLine);
+  eq('ADR citation line is calculated', verified.observations[0]?.evidence.find((item) => item.kind === 'adr')?.line, 3);
+
+  const graph: GraphSnapshot = {
+    nodes: new Map([['src/gateway.py', {
+      path: 'src/gateway.py',
+      language: 'python',
+      service: null,
+      loc: 1,
+      exports: [],
+      importLines: {},
+      externals: [],
+      isTest: false,
+    }]]),
+    edges: [],
+    dependents: new Map(),
+    dependencies: new Map(),
+  };
+  const input: AssessmentInput = {
+    config,
+    graph,
+    change,
+    adrs: [adr],
+    ownersOf: () => ({ owners: [], source: null }),
+    readFile: () => changedLine,
+    readBaseFile: () => '',
+  };
+  const inferred = verified.observations[0];
+  if (inferred) {
+    const assessment = (override?: 'accepted' | 'dismissed') =>
+      assess(input, {
+        modelObservations: [{ ...inferred, override }],
+        modelPass: { ran: true, provider: 'test', model: 'fixture' },
+      });
+    const activeCard = assessment();
+    check('inferred conflict is routed to design review', activeCard.escalations.some((item) => item.reason === 'design-conflict'));
+    check('cited ADR owners are routed as reviewers', activeCard.reviewers.some((item) => item.handle === '@engine-team'));
+
+    const dismissedCard = assessment('dismissed');
+    check('dismissed inference no longer escalates', !dismissedCard.escalations.some((item) => item.reason === 'design-conflict'));
+    check('dismissed inference remains visible', dismissedCard.dimensions
+      .flatMap((dimension) => dimension.observations)
+      .some((item) => item.id === inferred.id && item.override === 'dismissed'));
+    check('dismissed inference action no longer blocks the checklist', !dismissedCard.checklist.some((item) => item.text === inferred.requiredActions[0] && item.blocking));
+  } else {
+    check('verified ADR finding is available for scorecard tests', false);
+  }
+
+  const fabricatedAdr = await run(response('This sentence is not in the ADR.', changedLine));
+  eq('fabricated ADR quote cannot create a finding', fabricatedAdr.observations.length, 0);
+
+  const fabricatedDiff = await run(response(adrExcerpt, 'not a changed line'));
+  eq('ADR inference without changed-line evidence is dropped', fabricatedDiff.observations.length, 0);
 }
+
+void testInferredAdrReview().then(() => {
+  console.log(`\n${'='.repeat(60)}`);
+  if (failures.length === 0) {
+    console.log(`All ${passed} assertions passed.`);
+  } else {
+    console.log(`${passed} passed, ${failures.length} FAILED:\n`);
+    for (const failure of failures) console.log(`  - ${failure}`);
+    process.exitCode = 1;
+  }
+});

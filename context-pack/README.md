@@ -31,26 +31,18 @@ separate from the code it describes.
 | --- | --- |
 | `donna.json` | The service map, ownership records, compatibility rules and paths. In a real repo this would live at the root. |
 | `architecture-overview.md` | The "how the system fits together" doc an engineering lead writes once and everyone half-remembers. |
-| `adr/ADR-00xx-*.md` | Architecture decision records. Each has prose for humans and, where the decision is mechanically checkable, a fenced ````donna` JSON block the constraint engine executes. |
+| `adr/ADR-00xx-*.md` | Architecture decision records written as ordinary Markdown. Donna reads active ADR prose and labels model interpretations as inferred, with citations. |
 | `CODEOWNERS` | Ownership in the format GitHub uses, so the CODEOWNERS parser is exercised on a real-shaped file. |
 | `test-expectations.json` | Declared rules of the form "a change here requires a test there". |
 
-## How the two parts of an ADR differ
+## How Donna reviews ADRs
 
-This is the central idea of the pack, so it is worth being explicit.
-
-An ADR's **prose** is the decision: the context, the reasoning, the
-consequences. Humans read it. Donna cites it and hands it to the model pass,
-but it does not pretend to have verified it.
-
-An ADR's **`donna` block** is the subset of the decision that a machine can
-check without judgement — a forbidden import, a required reachability, a
-contract that must be versioned alongside its registry. Donna executes those
-deterministically and reports them with the ADR id attached.
-
-A decision with no block is not unenforced; it is *unchecked*, and Donna
-says so in its blind spots rather than reporting a clean pass. That distinction
-is the difference between a tool you can trust and one that makes you feel safe.
+ADRs stay ordinary Markdown written by the engineering team. Donna runs its
+fixed code checks separately, then uses the model to interpret relevant ADR
+prose against the change. Every such finding is marked **Inferred**, cites the
+ADR passage and changed code, and can be accepted or dismissed by the developer.
+An inferred interpretation is not a deterministic proof that the ADR has been
+violated.
 
 ## Pointing this at a real vLLM clone
 

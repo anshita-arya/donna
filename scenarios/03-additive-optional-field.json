@@ -34,13 +34,8 @@
     "verdict": "ready-to-propose",
     "mustFlag": [],
     "mustNotFlag": [
-      "adr-constraint:ADR-0002/contract-change-needs-version-entry",
-      "adr-constraint:ADR-0007/contract-change-needs-contract-test",
       "compat/required-field-added",
       "compat/contract-field-removed",
-      "adr-constraint:ADR-0001/gateway-must-not-reach-past-engine",
-      "adr-constraint:ADR-0003/serving-handlers-reach-the-gate",
-      "adr-constraint:ADR-0005/scheduler-consumed-through-entry",
       "tests/expectation-unmet"
     ],
     "notes": "Must come back clean. Any conflict here is a false positive, and false positives are how this tool stops being used."

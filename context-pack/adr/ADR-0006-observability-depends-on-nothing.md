@@ -40,37 +40,3 @@ a counter still exists. Removals need the observability owners.
 
 Observability ends up with some type definitions that arguably belong elsewhere.
 That duplication is cheaper than the cycle.
-
-## Enforcement
-
-```donna
-{
-  "id": "ADR-0006",
-  "status": "accepted",
-  "owners": ["@svc-observability"],
-  "appliesTo": [
-    "vllm/v1/metrics/**",
-    "vllm/tracing/**",
-    "vllm/logging_utils/**"
-  ],
-  "constraints": [
-    {
-      "id": "observability-has-no-upward-deps",
-      "kind": "forbidden-dependency",
-      "severity": "blocker",
-      "rationale": "An import from observability into any other service closes a cycle that surfaces as a partially-initialized module at startup rather than as an error.",
-      "params": {
-        "from": ["vllm/v1/metrics/**", "vllm/tracing/**", "vllm/logging_utils/**"],
-        "to": [
-          "vllm/entrypoints/**",
-          "vllm/renderers/**",
-          "vllm/v1/engine/**",
-          "vllm/v1/core/**",
-          "vllm/v1/executor/**"
-        ],
-        "transitive": false
-      }
-    }
-  ]
-}
-```

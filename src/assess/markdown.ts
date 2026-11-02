@@ -29,8 +29,13 @@ function observationBlock(observation: Observation, indent = ''): string[] {
   const mark = STATUS_MARK[observation.status];
   const where = observation.location ? ` — ${observation.location.file}:${observation.location.line}` : '';
   const src = observation.source === 'model' ? ' *(model)*' : '';
+  const inferred = observation.inferred ? ' **[Inferred from ADR prose]**' : '';
+  const override = observation.override ? ` *(override: ${observation.override})*` : '';
 
-  lines.push(`${indent}- **${mark} ${observation.title}**${where}${src}`);
+  lines.push(`${indent}- **${mark} ${observation.title}**${inferred}${where}${src}${override}`);
+  if (observation.inferred) {
+    lines.push(`${indent}  *Inferred interpretation, not a deterministic rule result.*`);
+  }
   lines.push(`${indent}  ${observation.detail}`);
 
   if (observation.evidence.length) {
@@ -201,11 +206,11 @@ export function renderScorecardMarkdown(card: Scorecard, options: RenderOptions 
   out.push('## How this was produced');
   out.push('');
   out.push(
-    `- Deterministic checks: dependency graph, ADR constraints, contract comparison against the base revision, ownership lookup, test reachability.`,
+    `- Fixed checks: dependency graph, contract comparison against the base revision, ownership lookup, test reachability. ADR prose review is inferred, not deterministic enforcement.`,
   );
   out.push(
     card.modelPass.ran
-      ? `- Model pass: ran via ${card.modelPass.provider} (${card.modelPass.model}). Model observations are marked *(model)* above.`
+      ? `- Model pass: ran via ${card.modelPass.provider} (${card.modelPass.model}). ADR-prose interpretations are marked **[Inferred from ADR prose]** above and cite their source passage.`
       : `- Model pass: did not run${card.modelPass.skippedBecause ? ` — ${card.modelPass.skippedBecause}` : ''}.`,
   );
   out.push('');
@@ -217,4 +222,3 @@ export function renderScorecardMarkdown(card: Scorecard, options: RenderOptions 
 
   return out.join('\n');
 }
-

@@ -65,31 +65,3 @@ stops catching the case it exists for.
 
 This ADR governs the *shape* of the contract. ADR-0007 governs the tests that
 have to come with it.
-
-## Enforcement
-
-```donna
-{
-  "id": "ADR-0002",
-  "status": "accepted",
-  "owners": ["@contract-council", "@svc-api-gateway"],
-  "appliesTo": [
-    "vllm/entrypoints/openai/**",
-    "vllm/entrypoints/anthropic/**",
-    "vllm/entrypoints/cohere/**"
-  ],
-  "constraints": [
-    {
-      "id": "contract-change-needs-version-entry",
-      "kind": "contract-change-requires-version",
-      "severity": "blocker",
-      "rationale": "A contract change is invisible in review precisely because it looks additive. Requiring the version entry in the same change forces someone to state what is being published.",
-      "params": {
-        "surface": ["vllm/entrypoints/openai/**/protocol.py"],
-        "symbolPattern": "class\\s+(\\w*(?:Request|Response|Choice|Message)\\w*)",
-        "versionRegistry": ["vllm/entrypoints/openai/api_versions.py"]
-      }
-    }
-  ]
-}
-```

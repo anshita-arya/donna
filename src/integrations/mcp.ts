@@ -311,7 +311,7 @@ async function ahaUrl(
       prompt: 'Enter your Aha! account subdomain, the part before .aha.io.',
       placeHolder: 'acme',
       ignoreFocusOut: true,
-      validateInput: (value) => /^[a-z0-9][a-z0-9-]*$/i.test(value.trim()) ? undefined : 'Enter the subdomain only, such as acme.',
+      validateInput: (value: string) => /^[a-z0-9][a-z0-9-]*$/i.test(value.trim()) ? undefined : 'Enter the subdomain only, such as acme.',
     });
     if (domain?.trim()) {
       domain = domain.trim();

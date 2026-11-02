@@ -1,10 +1,11 @@
 /**
  * Donna core types.
  *
- * Nothing in `src/core`, `src/evidence`, `src/constraints` or `src/assess`
+ * Nothing in `src/core`, `src/evidence` or `src/assess`
  * imports `vscode`, so the whole assessment pipeline runs headlessly — in the
- * eval harness, in CI, and in tests. Only `src/ui`, `src/agents/llm.ts` and
- * `extension.ts` touch the editor API.
+ * eval harness, in CI, and in tests. The extension entry point, assessment
+ * controller, commands, watcher, integrations, model adapter, and UI touch the
+ * editor API.
  */
 
 // ---------------------------------------------------------------------------
@@ -110,7 +111,7 @@ export type Confidence = 'high' | 'medium' | 'low';
 /**
  * `pass` — checked, no problem found.
  * `attention` — not a violation, but the developer has to do something.
- * `conflict` — contradicts a documented design decision or policy.
+ * `conflict` — the check identified a potential violation or break requiring revision.
  * `unknown` — the agent could not determine this. Never silently a pass.
  */
 export type ObservationStatus = 'pass' | 'attention' | 'conflict' | 'unknown';
@@ -157,7 +158,7 @@ export interface Observation {
   /** Stable across edits: derived from the rule and a semantic key, never lines. */
   id: string;
   dimension: Dimension;
-  /** Which check produced this, e.g. `adr-constraint:ADR-0002/api-version-required`. */
+  /** Which check produced this, e.g. `compat/required-field-added` or `model/design-conformance`. */
   checkId: string;
   status: ObservationStatus;
   confidence: Confidence;
@@ -165,6 +166,10 @@ export interface Observation {
   detail: string;
   evidence: Evidence[];
   source: 'static' | 'model';
+  /** Model interpretation of ADR prose; not a deterministic rule violation. */
+  inferred?: boolean;
+  /** Developer decision for an inferred finding, persisted per workspace. */
+  override?: 'accepted' | 'dismissed';
   /** What the developer or another stakeholder must do. Empty for a pass. */
   requiredActions: string[];
   escalate?: EscalationReason;
@@ -321,28 +326,6 @@ export interface DonnaConfig {
   contextPack: { name: string; synthetic: boolean; disclaimer?: string } | null;
 }
 
-// ---------------------------------------------------------------------------
-// ADR constraints
-// ---------------------------------------------------------------------------
-
-export type ConstraintKind =
-  | 'forbidden-dependency'
-  | 'required-reachability'
-  | 'contract-change-requires-version'
-  | 'service-public-entry'
-  | 'change-requires-test'
-  | 'required-decorator';
-
-export interface Constraint {
-  /** Unique within its ADR. */
-  id: string;
-  kind: ConstraintKind;
-  severity: 'blocker' | 'concern';
-  rationale: string;
-  /** Free-form per-kind parameters, validated by the engine. */
-  params: Record<string, unknown>;
-}
-
 export interface AdrDocument {
   /** e.g. `ADR-0002`. */
   id: string;
@@ -350,25 +333,9 @@ export interface AdrDocument {
   status: 'proposed' | 'accepted' | 'superseded' | 'deprecated' | string;
   path: string;
   owners: string[];
-  /** Globs this ADR governs, used to decide relevance to a change. */
-  appliesTo: string[];
-  constraints: Constraint[];
-  /** Prose body, handed to the model pass for the non-checkable parts. */
+  /** Original ADR text, handed to the model for explicitly inferred review. */
   body: string;
   supersededBy?: string;
-}
-
-export interface ConstraintResult {
-  adrId: string;
-  adrTitle: string;
-  adrPath: string;
-  constraint: Constraint;
-  status: Extract<ObservationStatus, 'pass' | 'conflict' | 'unknown'>;
-  message: string;
-  evidence: Evidence[];
-  owners: string[];
-  location?: { file: string; line: number };
-  requiredActions: string[];
 }
 
 // ---------------------------------------------------------------------------

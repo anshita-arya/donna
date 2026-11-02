@@ -28,6 +28,7 @@ import type {
 import { extractJson, ModelUnavailableError, type ModelClient } from './model';
 import { buildImpactPrompt, IMPACT_SYSTEM } from './prompts';
 import type { ExternalContext } from '../integrations/mcp';
+import { isActive } from '../evidence/adr';
 
 const DIMENSIONS: Dimension[] = [
   'design-conformance',
@@ -100,6 +101,8 @@ function asStringArray(value: unknown, max = 6): string[] {
 
 function parseCitations(
   value: unknown,
+  adrs: AdrDocument[],
+  change: ChangeSet,
   knownPaths: Set<string>,
   knownAdrs: Set<string>,
   knownExternalRefs: Set<string>,
@@ -116,6 +119,43 @@ function parseCitations(
     if (!ref) continue;
 
     const kind = oneOf(row.kind, EVIDENCE_KINDS, 'model');
+    const excerpt = asString(row.excerpt, 500);
+    const note = asString(row.note, 200) ?? undefined;
+    const requestedLine = typeof row.line === 'number' && Number.isFinite(row.line)
+      ? Math.max(1, Math.floor(row.line))
+      : undefined;
+
+    if (kind === 'adr') {
+      const adr = adrs.find((candidate) =>
+        ref.toUpperCase().includes(candidate.id.toUpperCase()),
+      );
+      if (!adr || !excerpt) continue;
+      const offset = adr.body.indexOf(excerpt);
+      if (offset < 0) continue;
+      verified++;
+      evidence.push({
+        kind,
+        ref: `${adr.id} — ${adr.title}`,
+        line: adr.body.slice(0, offset).split('\n').length,
+        excerpt,
+        note,
+      });
+      continue;
+    }
+
+    if (kind === 'diff') {
+      if (!knownPaths.has(ref) || !excerpt) continue;
+      const file = change.files.find((candidate) => candidate.path === ref);
+      const lines = file?.hunks.flatMap((hunk) => [
+        ...hunk.addedLines,
+        ...hunk.removedLines,
+      ]) ?? [];
+      const match = lines.find((line) => line.text.trim() === excerpt.trim());
+      if (!match || (requestedLine !== undefined && requestedLine !== match.line)) continue;
+      verified++;
+      evidence.push({ kind, ref, line: match.line, excerpt, note });
+      continue;
+    }
 
     // A citation counts as verified when it names something we actually gave
     // the model: a changed path, or an ADR id that exists.
@@ -127,7 +167,9 @@ function parseCitations(
     evidence.push({
       kind,
       ref,
-      note: asString(row.note, 200) ?? undefined,
+      line: requestedLine,
+      excerpt: excerpt ?? undefined,
+      note,
     });
   }
 
@@ -205,7 +247,8 @@ export async function runImpactPass(args: {
 
   const rows = Array.isArray(parsed.value.observations) ? parsed.value.observations : [];
   const knownPaths = new Set(change.paths);
-  const knownAdrs = new Set(adrs.map((a) => a.id));
+  const activeAdrs = adrs.filter(isActive);
+  const knownAdrs = new Set(activeAdrs.map((a) => a.id));
   const knownExternalRefs = new Set(externalContext.map((item) => item.ref));
 
   const observations: Observation[] = [];
@@ -221,8 +264,17 @@ export async function runImpactPass(args: {
       continue;
     }
 
+    const rawCitations = Array.isArray(row.citations) ? row.citations : [];
+    const claimedAdrCitation = rawCitations.some(
+      (citation) =>
+        citation !== null &&
+        typeof citation === 'object' &&
+        (citation as Record<string, unknown>).kind === 'adr',
+    );
     const { evidence, verified } = parseCitations(
       row.citations,
+      activeAdrs,
+      change,
       knownPaths,
       knownAdrs,
       knownExternalRefs,
@@ -233,6 +285,18 @@ export async function runImpactPass(args: {
     }
 
     const status = oneOf(row.status, STATUSES, 'attention');
+    const dimension = oneOf(row.dimension, DIMENSIONS, 'design-conformance');
+    const adrEvidence = evidence.some((citation) => citation.kind === 'adr');
+    const diffEvidence = evidence.some((citation) => citation.kind === 'diff');
+    if (claimedAdrCitation && !adrEvidence) {
+      droppedUnverified++;
+      continue;
+    }
+    const inferred = adrEvidence;
+    if (inferred && !diffEvidence) {
+      droppedUnverified++;
+      continue;
+    }
 
     // A conflict is the strongest claim the scorecard can carry and it drives
     // the verdict to design review, so it has to rest on a citation that names
@@ -243,23 +307,27 @@ export async function runImpactPass(args: {
       finalStatus = 'attention';
       droppedUnverified++;
     }
-
     const file = asString(row.file, 300);
     const lineValue = typeof row.line === 'number' && Number.isFinite(row.line) ? row.line : 1;
+    const citationKey = evidence
+      .filter((citation) => citation.kind === 'adr' || citation.kind === 'diff')
+      .map((citation) => `${citation.kind}:${citation.ref}:${citation.line ?? ''}:${citation.excerpt ?? ''}`)
+      .sort();
 
     observations.push({
-      id: findingId('model', [title, file ?? '', row.dimension as string]),
-      dimension: oneOf(row.dimension, DIMENSIONS, 'design-conformance'),
-      checkId: `model/${oneOf(row.dimension, DIMENSIONS, 'design-conformance')}`,
+      id: findingId('model', [title, file ?? '', dimension, ...citationKey]),
+      dimension,
+      checkId: `model/${dimension}`,
       status: finalStatus,
       confidence: oneOf(row.confidence, CONFIDENCES, 'low'),
       title,
       detail:
         finalStatus !== status
-          ? `${detail} (Reported as a conflict by the model, but none of its citations matched a changed file, known ADR, or retrieved MCP result, so it is shown as something to check rather than a blocking conflict.)`
+          ? `${detail} (The model's conflict did not include verifiable citations to the source material and changed code, so it is shown as something to check rather than a blocking conflict.)`
           : detail,
       evidence,
       source: 'model',
+      inferred,
       requiredActions: asStringArray(row.requiredActions),
       escalate:
         typeof row.escalate === 'string' && (ESCALATIONS as string[]).includes(row.escalate)

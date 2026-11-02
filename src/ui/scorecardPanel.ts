@@ -105,6 +105,11 @@ export class ScorecardPanel {
           case 'showLog':
             void vscode.commands.executeCommand('donna.showLog');
             break;
+          case 'overrideFinding':
+            if (message.id) {
+              void vscode.commands.executeCommand('donna.overrideInferredFinding', message.id);
+            }
+            break;
         }
       },
       undefined,
@@ -388,16 +393,26 @@ ${card ? this.cardBody(card) : ''}`;
     const actions = observation.requiredActions
       .map((a) => `<li>${inlineMarkdown(a)}</li>`)
       .join('');
+        const inference = observation.inferred
+          ? `<span class="badge inferred">Inferred from ADR prose</span>
+             <p class="note">This is an interpretation, not a deterministic rule result. Verify the cited passage and code evidence.</p>
+             ${observation.override
+               ? `<p class="note">Your workspace override: <strong>${escapeHtml(observation.override)}</strong>.</p>`
+               : ''}
+             <button class="ghost" data-cmd="overrideFinding" data-id="${escapeHtml(observation.id)}">${observation.override ? 'Change or clear override' : 'Override this finding'}</button>`
+          : '';
 
     return `
-<article class="observation ${observation.status}">
+    <article class="observation ${observation.status}">
   <header>
     <span class="pill ${observation.status}">${STATUS_WORD[observation.status]}</span>
     <h4>${escapeHtml(observation.title)}</h4>
     ${observation.source === 'model' ? '<span class="badge model">model</span>' : ''}
+    ${observation.inferred ? '<span class="badge inferred">Inferred</span>' : ''}
     <span class="badge">${escapeHtml(observation.confidence)} confidence</span>
   </header>
   <p>${inlineMarkdown(observation.detail)}</p>
+  ${inference}
   ${location ? `<p class="where">${location}</p>` : ''}
   ${actions ? `<div class="sub"><h5>What to do</h5><ul class="actions">${actions}</ul></div>` : ''}
   ${evidence ? `<details class="sub"><summary>Evidence (${observation.evidence.length})</summary><ul class="evidence">${evidence}</ul></details>` : ''}
@@ -542,7 +557,7 @@ ${card ? this.cardBody(card) : ''}`;
 <section class="provenance">
   <h2>How this was produced</h2>
   <ul>
-    <li><strong>Deterministic checks:</strong> dependency graph, ADR constraints, contract comparison against the base revision, ownership lookup, test reachability.</li>
+    <li><strong>Fixed checks:</strong> dependency graph, contract comparison against the base revision, ownership lookup, test reachability. ADR prose review is model-inferred, not deterministic enforcement.</li>
     <li><strong>Model pass:</strong> ${
       card.modelPass.ran
         ? `ran via ${escapeHtml(card.modelPass.provider ?? 'unknown')} (${escapeHtml(card.modelPass.model ?? 'unknown model')}). Its findings are badged <span class="badge model">model</span> above.`
@@ -695,6 +710,7 @@ button.link:hover { text-decoration: underline; background: none; }
 .badge { font-size: 0.76em; padding: 1px 6px; border-radius: 3px; background: var(--soft);
          opacity: 0.9; white-space: nowrap; }
 .badge.model { border: 1px solid var(--info); color: var(--info); }
+.badge.inferred { border: 1px solid var(--warn); color: var(--warn); }
 .badge.esc { border: 1px solid var(--warn); color: var(--warn); }
 .sub { margin-top: 8px; }
 .actions { list-style: none; padding: 0; }
@@ -745,7 +761,7 @@ document.addEventListener('click', (event) => {
   if (!target) return;
 
   const cmd = target.getAttribute('data-cmd');
-  if (cmd) { vscode.postMessage({ command: cmd }); return; }
+  if (cmd) { vscode.postMessage({ command: cmd, id: target.getAttribute('data-id') || undefined }); return; }
 
   const apply = target.getAttribute('data-apply');
   if (apply !== null) { vscode.postMessage({ command: 'applyEdit', id: apply }); return; }
