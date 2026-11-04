@@ -1,7 +1,15 @@
+import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 
 import { renderScorecardMarkdown } from './assess/markdown';
+import {
+  parseRawConfig,
+  WORKSPACE_CONTEXT_KEY,
+  WORKSPACE_CONTEXT_TEMPLATE,
+  type RawConfig,
+} from './core/config';
+import { SYNTHETIC_DEMO_CONTEXT } from './core/demoContext';
 import type { Observation, Scorecard } from './core/types';
 import { ScorecardPanel } from './ui/scorecardPanel';
 import { ChangeWatcher } from './watcher';
@@ -9,6 +17,7 @@ import { log } from './util/log';
 
 const ACCEPTED_KEY = 'donna.acceptedFindings';
 export const INFERRED_OVERRIDES_KEY = 'donna.inferredFindingOverrides';
+let contextSettingsDocument: vscode.Uri | undefined;
 
 export interface AssessmentCommandController {
   card?: Scorecard;
@@ -34,6 +43,102 @@ export function registerAssessmentCommands(
     controller.runAssessment({ reason: 'requested with model pass', withModel: true }),
   );
   register('donna.refresh', () => controller.runAssessment({ reason: 'refresh' }));
+
+  register('donna.configureContext', async () => {
+    const stored = context.workspaceState.get<RawConfig>(
+      WORKSPACE_CONTEXT_KEY,
+      WORKSPACE_CONTEXT_TEMPLATE,
+    );
+    const document = await vscode.workspace.openTextDocument({
+      language: 'json',
+      content: `${JSON.stringify(stored, null, 2)}\n`,
+    });
+    contextSettingsDocument = document.uri;
+    await vscode.window.showTextDocument(document);
+    void vscode.window.showInformationMessage(
+      'Donna context settings are an untitled editor. Use “Donna: Save Context Settings” to store them outside your repository.',
+    );
+  });
+
+  register('donna.saveContext', async () => {
+    const document = vscode.window.activeTextEditor?.document;
+    if (!document || !contextSettingsDocument || document.uri.toString() !== contextSettingsDocument.toString()) {
+      void vscode.window.showWarningMessage('Open Donna context settings first with “Donna: Configure Analysis Context”.');
+      return;
+    }
+
+    let raw: RawConfig;
+    try {
+      raw = parseRawConfig(document.getText());
+    } catch (error) {
+      void vscode.window.showErrorMessage(`Donna context settings were not saved: ${(error as Error).message}`);
+      return;
+    }
+
+    await context.workspaceState.update(WORKSPACE_CONTEXT_KEY, raw);
+    void vscode.window.showInformationMessage('Donna context settings saved to VS Code workspace storage.');
+    await controller.runAssessment({ reason: 'workspace context settings changed' });
+  });
+
+  register('donna.importContextFile', async () => {
+    const [selected] = await vscode.window.showOpenDialog({
+      canSelectMany: false,
+      openLabel: 'Import Donna context',
+      defaultUri: vscode.Uri.file(repoRoot),
+      filters: { 'JSON context files': ['json'] },
+    }) ?? [];
+    if (!selected) return;
+    let raw: RawConfig;
+    let ignoredOwnerConfig = false;
+    try {
+      const source = JSON.parse(fs.readFileSync(selected.fsPath, 'utf8')) as Record<string, unknown>;
+      ignoredOwnerConfig = 'ownership' in source;
+      delete source.ownership;
+      if (Array.isArray(source.services)) {
+        for (const service of source.services) {
+          if (service && typeof service === 'object' && 'owners' in service) {
+            ignoredOwnerConfig = true;
+            delete (service as Record<string, unknown>).owners;
+          }
+        }
+      }
+      raw = parseRawConfig(JSON.stringify(source));
+    } catch (error) {
+      void vscode.window.showErrorMessage(`Donna could not import ${path.basename(selected.fsPath)}: ${(error as Error).message}`);
+      return;
+    }
+    raw.contextDirectory ??= path.dirname(selected.fsPath);
+
+    await context.workspaceState.update(WORKSPACE_CONTEXT_KEY, raw);
+    void vscode.window.showInformationMessage(
+      `Donna imported context from ${path.basename(selected.fsPath)} into VS Code workspace storage. The selected file was not changed.${ignoredOwnerConfig ? ' Owner entries were not imported; reviewer routing uses CODEOWNERS.' : ''}`,
+    );
+    await controller.runAssessment({ reason: 'legacy context imported' });
+  });
+
+  register('donna.loadDemoContext', async () => {
+    const raw: RawConfig = {
+      ...SYNTHETIC_DEMO_CONTEXT,
+      contextDirectory: path.join(context.extensionPath, 'context-pack'),
+    };
+    await context.workspaceState.update(WORKSPACE_CONTEXT_KEY, raw);
+    void vscode.window.showInformationMessage(
+      'Donna loaded its clearly labeled synthetic demo context into VS Code workspace storage.',
+    );
+    await controller.runAssessment({ reason: 'synthetic demo context loaded' });
+  });
+
+  register('donna.resetContext', async () => {
+    const choice = await vscode.window.showWarningMessage(
+      'Reset Donna context settings stored for this workspace?',
+      { modal: true },
+      'Reset',
+    );
+    if (choice !== 'Reset') return;
+    await context.workspaceState.update(WORKSPACE_CONTEXT_KEY, undefined);
+    void vscode.window.showInformationMessage('Donna workspace context settings were reset.');
+    await controller.runAssessment({ reason: 'workspace context settings reset' });
+  });
 
   register('donna.openScorecard', () => {
     const panel = ScorecardPanel.show(repoRoot);
@@ -65,8 +170,11 @@ export function registerAssessmentCommands(
 
   register('donna.toggleWatch', async () => {
     const config = vscode.workspace.getConfiguration('donna');
-    const next = !config.get<boolean>('watch.enabled', true);
-    await config.update('watch.enabled', next, vscode.ConfigurationTarget.Workspace);
+    const current =
+      context.workspaceState.get<boolean>('donna.watch.enabled') ??
+      config.get<boolean>('watch.enabled', true);
+    const next = !current;
+    await context.workspaceState.update('donna.watch.enabled', next);
     watcher.start();
     void vscode.window.showInformationMessage(
       `Donna: watch mode ${next ? 'on — assessing as your agent writes' : 'off'}.`,

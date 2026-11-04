@@ -158,7 +158,7 @@ function testsToObservations(
       ],
       source: 'static',
       requiredActions: [
-        'Add a test that covers the changed behaviour, or confirm the test globs in donna.json are right.',
+        'Add a test that covers the changed behaviour, or adjust Donna’s workspace context settings for the test globs.',
       ],
       owners: [],
     });
@@ -240,7 +240,10 @@ function reviewRouting(args: {
         team: service.service,
         reason: `Owns the ${service.service} service, which this change modifies.`,
         weight: 'required',
-        evidence: [{ kind: 'service-map', ref: service.service, note: service.via }],
+        evidence: service.modules
+          .map((module) => input.ownersOf(module).source)
+          .filter((evidence): evidence is Evidence => !!evidence)
+          .slice(0, 2),
       });
     }
   }
@@ -253,7 +256,10 @@ function reviewRouting(args: {
         team: service.service,
         reason: `Owns ${service.service}, which is downstream of this change.`,
         weight: 'suggested',
-        evidence: [{ kind: 'service-map', ref: service.service, note: service.via }],
+        evidence: service.modules
+          .map((module) => input.ownersOf(module).source)
+          .filter((evidence): evidence is Evidence => !!evidence)
+          .slice(0, 2),
       });
     }
   }
@@ -297,13 +303,13 @@ function reviewRouting(args: {
       confidence: 'high',
       title: 'no owner could be identified for this change',
       detail:
-        `Neither the ownership records nor CODEOWNERS covers any changed path, so Donna cannot tell you who should review this. ` +
+        `No CODEOWNERS rule covers any changed path, so Donna cannot tell you who should review this. ` +
         `It will not guess from git history — that nominates whoever last touched the file, which is not the same as the owner.`,
       evidence: [
-        { kind: 'ownership', ref: input.config.ownership.codeowners ?? 'donna.json', note: 'no matching rule' },
+        { kind: 'ownership', ref: 'CODEOWNERS', note: 'no matching rule' },
       ],
       source: 'static',
-      requiredActions: ['Ask your lead who owns these paths, and add an ownership record so the next change routes itself.'],
+      requiredActions: ['Ask your lead who owns these paths, and add a rule to CODEOWNERS so future changes route correctly.'],
       escalate: 'missing-ownership',
       owners: [],
     });
@@ -681,7 +687,7 @@ function summarize(dimension: Dimension, observations: Observation[], status: Ob
     'blast-radius': 'Dependents traversed upward from the changed modules.',
     'production-risk': 'Heuristic signals, so a clear result means nothing obvious rather than no risk.',
     'test-coverage': 'Tests that import the changed modules, plus declared expectations.',
-    'review-routing': 'From ownership records and CODEOWNERS; never inferred from git history.',
+    'review-routing': 'From CODEOWNERS and ADR owner metadata; never inferred from git history.',
   };
 
   return `${lead} ${parts.join(', ')}. ${hint[dimension]}`;

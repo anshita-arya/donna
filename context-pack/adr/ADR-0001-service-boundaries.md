@@ -43,7 +43,7 @@ This is narrower than "respect the layering". It is one concrete import rule,
 chosen because it is the rule both incidents broke and because it can be checked
 mechanically on every change rather than remembered during review.
 
-The full dependency policy lives in the service map (`donna.json`), which
+The full dependency policy is held in Donna's workspace context, which
 declares what each service may depend on. This ADR makes the edge from the
 gateway to the engine's internals specifically forbidden, because that is the one
 with a history.

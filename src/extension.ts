@@ -2,7 +2,6 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 
-import { scaffoldConfig } from './core/config';
 import type { Scorecard } from './core/types';
 import { connectIntegrations } from './integrations/mcp';
 import { runDesignReview } from './agents/designReview';
@@ -98,9 +97,14 @@ export function activate(context: vscode.ExtensionContext): void {
   // Watcher
   // -------------------------------------------------------------------------
 
-  const watcher = new ChangeWatcher(async (reason) => {
-    await runAssessment({ reason });
-  });
+  const watcher = new ChangeWatcher(
+    async (reason) => {
+      await runAssessment({ reason });
+    },
+    () =>
+      context.workspaceState.get<boolean>('donna.watch.enabled') ??
+      vscode.workspace.getConfiguration('donna').get<boolean>('watch.enabled', true),
+  );
   context.subscriptions.push(watcher);
   watcher.start();
 
@@ -108,7 +112,6 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.workspace.onDidChangeConfiguration((event) => {
       if (event.affectsConfiguration('donna.watch')) watcher.start();
       if (
-        event.affectsConfiguration('donna.contextPack') ||
         event.affectsConfiguration('donna.baseRef')
       ) {
         void runAssessment({ reason: 'configuration changed' });
@@ -138,21 +141,6 @@ export function activate(context: vscode.ExtensionContext): void {
   });
 
   register('donna.showLog', () => log.show());
-
-  register('donna.initConfig', async () => {
-    const target = path.join(repoRoot, 'donna.json');
-    if (fs.existsSync(target)) {
-      const document = await vscode.workspace.openTextDocument(vscode.Uri.file(target));
-      await vscode.window.showTextDocument(document);
-      return;
-    }
-    fs.writeFileSync(target, scaffoldConfig(), 'utf8');
-    const document = await vscode.workspace.openTextDocument(vscode.Uri.file(target));
-    await vscode.window.showTextDocument(document);
-    void vscode.window.showInformationMessage(
-      'Donna: starter config created. Fill in your services, ADR directory and ownership, then re-assess.',
-    );
-  });
 
   register('donna.setApiKey', async () => {
     const key = await vscode.window.showInputBox({

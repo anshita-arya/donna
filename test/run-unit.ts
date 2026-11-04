@@ -21,7 +21,7 @@ import { codeownersPatternToGlob, parseCodeowners, OwnershipIndex } from '../src
 import { parseAdr, isActive, relevantAdrs } from '../src/evidence/adr';
 import { extractJson } from '../src/agents/model';
 import { checkChangeRequest, validateEditAgainstFile } from '../src/agents/guardrails';
-import { resolveConfig } from '../src/core/config';
+import { parseRawConfig, resolveConfig } from '../src/core/config';
 import { findingId } from '../src/core/id';
 import { buildSearchArguments, isReadOnlySearchTool } from '../src/integrations/tools';
 import { runImpactPass } from '../src/agents/impact';
@@ -325,7 +325,6 @@ group('graph');
         { name: 'engine', match: ['engine/**'] },
       ],
       adrDir: null,
-      ownership: { codeowners: null },
       tests: { match: ['tests/**'] },
     },
     '/repo',
@@ -366,7 +365,7 @@ group('graph');
 }
 
 {
-  const config = resolveConfig({ adrDir: null, ownership: { codeowners: null } }, '/repo');
+  const config = resolveConfig({ adrDir: null }, '/repo');
   const cyclic = buildGraph(
     [
       { path: 'a.py', text: 'from b import thing\n' },
@@ -413,11 +412,7 @@ eq('unanchored directory with a slash stays anchored', codeownersPatternToGlob('
   eq('ownerless line skipped', rules.length, 3);
   eq('line numbers recorded', rules[0].line, 2);
 
-  const config = resolveConfig(
-    { adrDir: null, ownership: { codeowners: '.github/CODEOWNERS', records: [] }, services: [] },
-    '/repo',
-  );
-  const index = new OwnershipIndex(config, text);
+  const index = new OwnershipIndex(text, '.github/CODEOWNERS');
 
   // Last matching rule wins, which is the CODEOWNERS convention.
   eq(
@@ -430,24 +425,9 @@ eq('unanchored directory with a slash stays anchored', codeownersPatternToGlob('
 }
 
 {
-  // Explicit records beat CODEOWNERS, because a record answers "who owns this
-  // component" while CODEOWNERS answers "who must approve this file".
-  const config = resolveConfig(
-    {
-      adrDir: null,
-      services: [],
-      ownership: {
-        codeowners: '.github/CODEOWNERS',
-        records: [{ match: ['vllm/entrypoints/**'], owners: ['@record-owner'], team: 'Records' }],
-      },
-    },
-    '/repo',
-  );
-  const index = new OwnershipIndex(config, '*  @codeowners-fallback');
-  eq('records take precedence', index.lookup('vllm/entrypoints/x.py').owners, ['@record-owner']);
-  eq('team is carried through', index.lookup('vllm/entrypoints/x.py').team, 'Records');
-  eq('codeowners still used elsewhere', index.lookup('other/x.py').owners, ['@codeowners-fallback']);
-  check('no-owner path reports nothing rather than guessing', index.unowned(['x.py']).length === 0);
+  const index = new OwnershipIndex('vllm/**  @codeowners-fallback');
+  eq('CODEOWNERS is the only owner source', index.lookup('vllm/entrypoints/x.py').owners, ['@codeowners-fallback']);
+  eq('unmatched paths remain unowned', index.unowned(['x.py']), ['x.py']);
 }
 
 // ---------------------------------------------------------------------------
@@ -541,7 +521,6 @@ group('guardrails');
     {
       adrDir: 'docs/adr',
       designDocs: ['docs/architecture.md'],
-      ownership: { codeowners: '.github/CODEOWNERS', records: [] },
       tests: { expectations: 'test-expectations.json' },
       services: [],
     },
@@ -559,7 +538,6 @@ group('guardrails');
       { file: 'vllm/entrypoints/openai/chat_completion/protocol.py', find: 'a', replace: 'b' },
       { file: 'docs/adr/ADR-0002-contract-versioning.md', find: 'a', replace: 'b' },
       { file: '.github/CODEOWNERS', find: 'a', replace: 'b' },
-      { file: 'donna.json', find: 'a', replace: 'b' },
       { file: 'test-expectations.json', find: 'a', replace: 'b' },
       { file: '.github/workflows/ci.yml', find: 'a', replace: 'b' },
       { file: 'docs/architecture.md', find: 'a', replace: 'b' },
@@ -575,7 +553,6 @@ group('guardrails');
   ]);
   check('ADR edit rejected', violations.some((v) => v.path.includes('ADR-0002')));
   check('CODEOWNERS edit rejected', violations.some((v) => v.path.includes('CODEOWNERS')));
-  check('own config edit rejected', violations.some((v) => v.path === 'donna.json'));
   check('test expectations edit rejected', violations.some((v) => v.path === 'test-expectations.json'));
   check('CI config edit rejected', violations.some((v) => v.path.includes('workflows')));
   check('design doc edit rejected', violations.some((v) => v.path === 'docs/architecture.md'));
@@ -612,6 +589,36 @@ group('finding identity');
 // ---------------------------------------------------------------------------
 
 group('MCP read-only tool selection');
+
+group('workspace context settings');
+
+eq(
+  'context settings parse without writing a repository file',
+  parseRawConfig('{"contextDirectory":"../team-context","services":[]}'),
+  { contextDirectory: '../team-context', services: [] },
+);
+check(
+  'ownership overrides are rejected in workspace context',
+  (() => {
+    try {
+      parseRawConfig('{"ownership":{"records":[]}}');
+      return false;
+    } catch {
+      return true;
+    }
+  })(),
+);
+check(
+  'service owners must come from CODEOWNERS',
+  (() => {
+    try {
+      parseRawConfig('{"services":[{"name":"api","match":["src/api/**"],"owners":["@api"]}]}');
+      return false;
+    } catch {
+      return true;
+    }
+  })(),
+);
 
 check(
   'read-only search tool is allowed',

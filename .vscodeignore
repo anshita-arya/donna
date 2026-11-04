@@ -4,6 +4,7 @@ src/**
 test/**
 out/**
 out-test/**
+out-eval/**
 node_modules/**
 .gitignore
 esbuild.js

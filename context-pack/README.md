@@ -29,10 +29,10 @@ separate from the code it describes.
 
 | File | What it stands in for |
 | --- | --- |
-| `donna.json` | The service map, ownership records, compatibility rules and paths. In a real repo this would live at the root. |
+| `src/core/demoContext.ts` | Synthetic service map and compatibility rules used by the eval harness and the **Load Synthetic Demo Context** command. The demo context is code, not a JSON file in a user's repository. |
 | `architecture-overview.md` | The "how the system fits together" doc an engineering lead writes once and everyone half-remembers. |
 | `adr/ADR-00xx-*.md` | Architecture decision records written as ordinary Markdown. Donna reads active ADR prose and labels model interpretations as inferred, with citations. |
-| `CODEOWNERS` | Ownership in the format GitHub uses, so the CODEOWNERS parser is exercised on a real-shaped file. |
+| `CODEOWNERS` | Synthetic ownership in GitHub's format, so Donna's CODEOWNERS parser is exercised on a real-shaped file. |
 | `test-expectations.json` | Declared rules of the form "a change here requires a test there". |
 
 ## How Donna reviews ADRs
@@ -50,9 +50,7 @@ The globs already target real paths, so:
 
 ```bash
 git clone --filter=blob:none --depth 1 https://github.com/vllm-project/vllm.git
-# then, in VS Code, set:
-#   donna.contextPack  ->  /path/to/donna/context-pack
-#   and open the vllm clone as the workspace
+# then open the clone in VS Code and run "Donna: Load Synthetic Demo Context"
 ```
 
 The findings will be about a real codebase measured against fictional rules.

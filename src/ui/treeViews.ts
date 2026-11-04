@@ -339,7 +339,7 @@ export class AssessmentTreeProvider implements vscode.TreeDataProvider<Node> {
         item.description = `${required} required, ${element.card.reviewers.length - required} suggested`;
         item.iconPath = new vscode.ThemeIcon('organization');
         item.tooltip =
-          'Read from ownership records and CODEOWNERS. Donna does not assign ownership and does not infer it from git history.';
+          'Read from CODEOWNERS and ADR owner metadata. Donna does not assign ownership or infer it from git history.';
         return item;
       }
 
@@ -358,7 +358,7 @@ export class AssessmentTreeProvider implements vscode.TreeDataProvider<Node> {
         const item = new vscode.TreeItem('What this agent does not do', collapsed);
         item.iconPath = new vscode.ThemeIcon('shield');
         item.tooltip =
-          'Enforced in code, not just stated: the guardrail module rejects edits to design records, ownership, config, test expectations and CI.';
+          'Enforced in code, not just stated: the guardrail module rejects edits to design records, ownership, test expectations and CI.';
         return item;
       }
 

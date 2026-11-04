@@ -70,23 +70,21 @@ export function analyzeBlast(input: AssessmentInput, maxDepth = 3): BlastAnalysi
 
   const services: ServiceImpact[] = [];
   for (const [service, modules] of direct) {
-    const spec = serviceSpecOf(service, config.services);
     services.push({
       service,
       reach: 'direct',
       modules: [...modules].sort(),
-      owners: spec?.owners ?? [...new Set([...modules].flatMap((m) => ownersOf(m).owners))],
+      owners: [...new Set([...modules].flatMap((m) => ownersOf(m).owners))],
       via: 'a changed file is in this service',
     });
   }
   for (const [service, modules] of downstream) {
-    const spec = serviceSpecOf(service, config.services);
     const sample = [...modules].sort();
     services.push({
       service,
       reach: 'downstream',
       modules: sample,
-      owners: spec?.owners ?? [...new Set(sample.flatMap((m) => ownersOf(m).owners))],
+      owners: [...new Set(sample.flatMap((m) => ownersOf(m).owners))],
       via: `${sample.length} module${sample.length === 1 ? '' : 's'} import something this change touches`,
     });
   }
@@ -195,20 +193,20 @@ export function analyzeBlast(input: AssessmentInput, maxDepth = 3): BlastAnalysi
           kind: 'service-map',
           ref: `${edge.fromService}.dependsOn`,
           excerpt: allowed?.join(', ') || '(none declared)',
-          note: 'from donna.json',
+          note: 'from the context settings stored for this workspace',
         },
       ],
       source: 'static',
       requiredActions: permitted
         ? [`Mention the new ${edge.fromService} → ${edge.toService} dependency in the PR description so reviewers see it.`]
         : [
-            `Either remove the dependency, or get the service map amended by the ${edge.toService} owners before proposing this.`,
+            `Either remove the dependency, or ask the ${edge.toService} owners to review the new dependency before proposing this.`,
           ],
       escalate: permitted ? undefined : 'design-conflict',
       owners: [
         ...new Set([
-          ...(serviceSpecOf(edge.toService, config.services)?.owners ?? []),
-          ...(spec?.owners ?? []),
+          ...ownersOf(edge.from).owners,
+          ...ownersOf(edge.to).owners,
         ]),
       ],
       location: { file: edge.from, line: edge.line },

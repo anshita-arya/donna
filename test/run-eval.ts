@@ -22,6 +22,7 @@ import * as path from 'node:path';
 
 import { assess } from '../src/assess/scorecard';
 import { renderScorecardMarkdown } from '../src/assess/markdown';
+import { SYNTHETIC_DEMO_CONTEXT } from '../src/core/demoContext';
 import { prepareAssessment } from '../src/core/workspace';
 import type { Scorecard, Verdict } from '../src/core/types';
 
@@ -46,6 +47,7 @@ const ROOT = findProjectRoot(__dirname);
 const SANDBOX = path.join(ROOT, 'demo', 'sandbox');
 const PACK = path.join(ROOT, 'context-pack');
 const SCENARIO_DIR = path.join(ROOT, 'scenarios');
+const PACK_CONFIG = SYNTHETIC_DEMO_CONTEXT;
 
 interface ScenarioEdit {
   file: string;
@@ -238,7 +240,7 @@ function main(): void {
     console.log(`  Coding agent changed: ${touched.join(', ')}`);
     console.log();
 
-    const prepared = prepareAssessment({ repoRoot: repo, packDir: PACK });
+    const prepared = prepareAssessment({ repoRoot: repo, packDir: PACK, rawConfig: PACK_CONFIG });
     const card = assess(prepared.input, {
       loadIssues: prepared.loadIssues,
       adrFiles: prepared.adrFiles,

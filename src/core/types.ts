@@ -204,7 +204,7 @@ export interface TestRequirement {
 
 export interface ReviewerSuggestion {
   handle: string;
-  /** Team or role label, from ownership records. */
+  /** Team or role label, when present in owner metadata. */
   team?: string;
   reason: string;
   /** `required` when an ownership record or ADR mandates the review. */
@@ -280,8 +280,6 @@ export interface ServiceSpec {
   name: string;
   match: string[];
   description?: string;
-  /** Owner handles. Empty array is meaningful: it triggers missing-ownership. */
-  owners?: string[];
   /** Other services this one is allowed to depend on. Absent = unconstrained. */
   dependsOn?: string[];
 }
@@ -304,12 +302,6 @@ export interface DonnaConfig {
   adrDir: string | null;
   /** Additional architecture/design docs the model pass may cite. */
   designDocs: string[];
-  ownership: {
-    /** CODEOWNERS-format file. */
-    codeowners: string | null;
-    /** Extra ownership records keyed by glob. */
-    records: { match: string[]; owners: string[]; team?: string }[];
-  };
   tests: {
     /** Globs identifying test files. */
     match: string[];

@@ -3,7 +3,7 @@
  *
  * ADRs remain ordinary Markdown authored by the team. Donna reads their
  * metadata and passes the full prose to the model for explicitly inferred
- * review; it does not require a Donna-specific rule block.
+ * review.
  */
 
 import type { AdrDocument } from '../core/types';

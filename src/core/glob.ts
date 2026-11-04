@@ -1,7 +1,7 @@
 /**
  * A small glob matcher, so the analysis core has zero runtime dependencies.
  * Supports `**`, `*`, `?`, and brace alternation `{a,b}` — enough for the
- * path patterns that appear in `donna.json`.
+ * path patterns configured in Donna's workspace context.
  */
 
 function expandBraces(pattern: string): string[] {

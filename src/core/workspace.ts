@@ -164,51 +164,20 @@ export function readFileAtRef(root: string, ref: string, rel: string): string | 
 // Config and context pack
 // ---------------------------------------------------------------------------
 
-export const CONFIG_NAMES = ['donna.json', '.donna.json'];
-
-export function findConfigPath(root: string, extraDir?: string): string | null {
-  const dirs = [extraDir, root].filter((d): d is string => !!d);
-  for (const dir of dirs) {
-    for (const name of CONFIG_NAMES) {
-      const candidate = path.join(dir, name);
-      if (fs.existsSync(candidate)) return candidate;
-    }
-  }
-  return null;
-}
-
 export interface LoadedConfig {
   config: DonnaConfig;
-  configPath: string | null;
-  /** Directory the config was found in — context-pack paths resolve against it. */
   packDir: string;
   issues: string[];
 }
 
-export function loadConfig(root: string, extraDir?: string): LoadedConfig {
-  const issues: string[] = [];
-  const configPath = findConfigPath(root, extraDir);
-
-  let raw: RawConfig | undefined;
-  if (configPath) {
-    try {
-      raw = JSON.parse(fs.readFileSync(configPath, 'utf8')) as RawConfig;
-    } catch (error) {
-      issues.push(
-        `${toPosix(path.relative(root, configPath)) || configPath}: not valid JSON (${(error as Error).message}). Running with defaults, which means no services, no ADRs and no compatibility rules.`,
-      );
-    }
-  } else {
-    issues.push(
-      'No donna.json found. Without a service map, ADRs and ownership records, only the dependency graph and risk heuristics can contribute.',
-    );
-  }
-
+export function loadConfig(root: string, raw?: RawConfig): LoadedConfig {
+  const configuredPackDir = raw?.contextDirectory
+    ? path.resolve(root, raw.contextDirectory)
+    : root;
   return {
     config: resolveConfig(raw, root),
-    configPath,
-    packDir: configPath ? path.dirname(configPath) : root,
-    issues,
+    packDir: configuredPackDir,
+    issues: [],
   };
 }
 
@@ -217,6 +186,7 @@ export interface ContextPack {
   adrs: AdrDocument[];
   adrIssues: string[];
   codeownersText: string | undefined;
+  codeownersPath: string | undefined;
   testExpectations: TestExpectation[];
   issues: string[];
 }
@@ -266,19 +236,26 @@ export function loadContextPack(
   const { documents, issues: parseIssues } = indexAdrs(adrFiles);
 
   let codeownersText: string | undefined;
-  if (config.ownership.codeowners) {
-    const file = resolvePackPath(repoRoot, packDir, config.ownership.codeowners);
-    if (file) {
+  let codeownersPath: string | undefined;
+  const codeownersCandidates = ['.github/CODEOWNERS', 'CODEOWNERS', 'docs/CODEOWNERS'];
+  for (const base of [repoRoot, packDir]) {
+    for (const candidate of codeownersCandidates) {
+      const file = path.resolve(base, candidate);
+      if (!fs.existsSync(file)) continue;
       try {
         codeownersText = fs.readFileSync(file, 'utf8');
-      } catch {
-        issues.push(`${config.ownership.codeowners}: could not be read.`);
+        codeownersPath = toPosix(path.relative(repoRoot, file));
+        break;
+      } catch (error) {
+        issues.push(`${toPosix(path.join(base, candidate))}: could not be read (${(error as Error).message}).`);
       }
-    } else if (config.ownership.records.length === 0) {
-      issues.push(
-        `No CODEOWNERS at \`${config.ownership.codeowners}\` and no ownership records configured, so reviewer routing has nothing to work from.`,
-      );
     }
+    if (codeownersText) break;
+  }
+  if (!codeownersText) {
+    issues.push(
+      'No CODEOWNERS file was found in .github/CODEOWNERS, CODEOWNERS, or docs/CODEOWNERS. Reviewer routing may be incomplete.',
+    );
   }
 
   let testExpectations: TestExpectation[] = [];
@@ -301,6 +278,7 @@ export function loadContextPack(
     adrs: documents,
     adrIssues: parseIssues.map((i) => `${i.path}: ${i.message}`),
     codeownersText,
+    codeownersPath,
     testExpectations,
     issues,
   };
@@ -342,7 +320,9 @@ export interface PreparedAssessment {
 
 export interface PrepareOptions {
   repoRoot: string;
-  /** Directory holding donna.json, when the context pack lives outside the repo. */
+  /** Donna-specific analysis settings stored outside the repository. */
+  rawConfig?: RawConfig;
+  /** Optional context directory, usually sourced from extension workspace storage. */
   packDir?: string;
   /** Explicit base ref; otherwise the merge base with the default branch. */
   baseRef?: string;
@@ -360,7 +340,7 @@ export interface PrepareOptions {
 
 export function prepareAssessment(options: PrepareOptions): PreparedAssessment {
   const repoRoot = options.repoRoot;
-  const loaded = loadConfig(repoRoot, options.packDir);
+  const loaded = loadConfig(repoRoot, options.rawConfig);
   const config = loaded.config;
 
   const pack = loadContextPack(repoRoot, options.packDir ?? loaded.packDir, config);
@@ -404,7 +384,7 @@ export function prepareAssessment(options: PrepareOptions): PreparedAssessment {
     branch,
   });
 
-  const ownership = new OwnershipIndex(config, pack.codeownersText);
+  const ownership = new OwnershipIndex(pack.codeownersText, pack.codeownersPath);
 
   const input: AssessmentInput = {
     config,

@@ -27,13 +27,17 @@ export class ChangeWatcher implements vscode.Disposable {
   private enabled = false;
   private lastTouched: string | undefined;
 
-  constructor(private readonly onSettled: (reason: string) => void | Promise<void>) {}
+  constructor(
+    private readonly onSettled: (reason: string) => void | Promise<void>,
+    private readonly readEnabled: () => boolean = () =>
+      vscode.workspace.getConfiguration('donna').get<boolean>('watch.enabled', true),
+  ) {}
 
   start(): void {
     this.stop();
 
     const config = vscode.workspace.getConfiguration('donna');
-    this.enabled = config.get<boolean>('watch.enabled', true);
+    this.enabled = this.readEnabled();
     const delay = Math.max(500, config.get<number>('watch.debounceMs', 2500));
 
     if (!this.enabled) {

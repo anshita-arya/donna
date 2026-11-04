@@ -51,7 +51,7 @@
     "viewsWelcome": [
       {
         "view": "donna.assessment",
-        "contents": "No assessment yet.\n\nDonna watches for changes your coding agent makes and assesses their system-wide impact before you open a PR.\n\n[Assess Current Change](command:donna.assess)\n[Open Scorecard](command:donna.openScorecard)\n[Connect Integrations](command:donna.connectIntegrations)\n\nNo context pack configured? Point Donna at your service map, ADRs and ownership records:\n[Create Config](command:donna.initConfig)"
+        "contents": "No assessment yet.\n\nDonna watches for changes your coding agent makes and assesses their system-wide impact before you open a PR.\n\n[Assess Current Change](command:donna.assess)\n[Open Scorecard](command:donna.openScorecard)\n[Configure Analysis Context](command:donna.configureContext)\n[Load Synthetic Demo Context](command:donna.loadDemoContext)\n[Connect Integrations](command:donna.connectIntegrations)\n\nContext settings are stored by VS Code for this workspace. Donna reads repository context files without creating Donna-specific files in the repository."
       }
     ],
     "commands": [
@@ -111,9 +111,29 @@
         "icon": "$(edit)"
       },
       {
-        "command": "donna.initConfig",
-        "title": "Donna: Create Config File",
-        "icon": "$(new-file)"
+        "command": "donna.configureContext",
+        "title": "Donna: Configure Analysis Context",
+        "icon": "$(settings-gear)"
+      },
+      {
+        "command": "donna.saveContext",
+        "title": "Donna: Save Context Settings",
+        "icon": "$(save)"
+      },
+      {
+        "command": "donna.importContextFile",
+        "title": "Donna: Import Context File",
+        "icon": "$(archive)"
+      },
+      {
+        "command": "donna.loadDemoContext",
+        "title": "Donna: Load Synthetic Demo Context",
+        "icon": "$(beaker)"
+      },
+      {
+        "command": "donna.resetContext",
+        "title": "Donna: Reset Workspace Context",
+        "icon": "$(clear-all)"
       },
       {
         "command": "donna.setApiKey",
@@ -204,11 +224,6 @@
     "configuration": {
       "title": "Donna",
       "properties": {
-        "donna.contextPack": {
-          "type": "string",
-          "default": "",
-          "markdownDescription": "Path to a directory holding `donna.json`, the ADRs, ownership records and test expectations. Leave empty to look for `donna.json` at the workspace root. Useful when the context pack is maintained separately from the code it describes."
-        },
         "donna.baseRef": {
           "type": "string",
           "default": "",
@@ -297,16 +312,7 @@
           "description": "Least severe status that gets a squiggle. Everything still appears in the Donna views."
         }
       }
-    },
-    "jsonValidation": [
-      {
-        "fileMatch": [
-          "donna.json",
-          ".donna.json"
-        ],
-        "url": "./schemas/donna.schema.json"
-      }
-    ]
+    }
   },
   "scripts": {
     "build": "node esbuild.js --production",

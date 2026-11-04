@@ -486,7 +486,7 @@ ${card ? this.cardBody(card) : ''}`;
     return `
 <section>
   <h2>Reviewers</h2>
-  <p class="note">Read from ownership records and CODEOWNERS. Donna does not assign ownership, and does not guess it from who last touched the file.</p>
+  <p class="note">Read from CODEOWNERS and ADR owner metadata. Donna does not assign ownership or guess from git history.</p>
   <ul class="reviewers">${rows}</ul>
 </section>`;
   }
@@ -566,7 +566,7 @@ ${card ? this.cardBody(card) : ''}`;
   </ul>
   <h3>What this agent does not do</h3>
   <ul class="limits">${card.limits.map((l) => `<li>${escapeHtml(l)}</li>`).join('')}</ul>
-  <p class="note">Enforced in code, not only stated: edits to design records, ownership, this tool's config, test expectations and CI configuration are rejected before you ever see them.</p>
+  <p class="note">Enforced in code, not only stated: edits to design records, ownership, test expectations and CI configuration are rejected before you ever see them.</p>
   <p class="stamp">Generated ${escapeHtml(card.generatedAt)} · ${escapeHtml(this.repoRoot)}</p>
 </section>`;
   }

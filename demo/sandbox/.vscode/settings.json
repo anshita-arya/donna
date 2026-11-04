@@ -1,6 +1,5 @@
 {
-  "//": "Pre-configured for the demo. The context pack lives outside this repo on purpose — it is the 'design context maintained separately from the code' case.",
-  "donna.contextPack": "../../context-pack",
+  "//": "Pre-configured for the demo. Import the context pack separately into VS Code workspace storage.",
   "donna.llm.trigger": "onConflict",
   "donna.watch.enabled": false,
   "donna.blastRadiusDepth": 3

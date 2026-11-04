@@ -36,7 +36,7 @@ client, or that the redundant-looking check they removed was the only thing
 standing between a malformed request and the scheduler.
 
 That evidence exists. It is just spread across service repositories, dependency
-relationships, design documentation, ownership records and test suites — and
+relationships, design documentation, CODEOWNERS files and test suites — and
 none of it is visible in the diff. So the conflict surfaces in PR review, or in
 a lead's end-of-week read of the codebase, which is the most expensive possible
 moment: the change gets sent back for design review, and sometimes rewritten or
@@ -56,7 +56,7 @@ about it:
 | **Blast radius** | What else does this reach? | Dependents traversed upward, by hop distance, mapped onto services |
 | **Production risk** | What could fail in a way tests will not catch? | Heuristics over the changed lines: concurrency, removed error handling, changed limits, dropped observability, resource allocation, auth |
 | **Test coverage** | What should be run, and what is missing? | Which tests import the changed modules, plus declared test expectations |
-| **Review routing** | Who needs to see this? | Ownership records and CODEOWNERS — never inferred from git history |
+| **Review routing** | Who needs to see this? | Existing CODEOWNERS files and ADR owner metadata — never inferred from git history |
 
 The verdict is one of **ready to propose**, **needs revision**, or **send to
 design review**.
@@ -206,11 +206,18 @@ npm test               # unit tests + the four scenarios
 
 Then press **F5** in VS Code to launch the Extension Development Host.
 
-Point Donna at your context with `donna.json` at the repo root, or at a
-separate directory via the `donna.contextPack` setting — useful when the
-context pack is maintained apart from the code it describes.
+Donna does not create or automatically load a Donna-specific configuration
+file in your repository. Run **Donna: Configure Analysis Context** to edit context settings
+in an untitled VS Code document, then run **Donna: Save Context Settings**.
+Donna stores those settings in VS Code's workspace storage, outside your
+checkout. Use **Donna: Import Context File** to copy an existing JSON context
+file into that storage; the source file is read-only and is not deleted.
 
-Run `Donna: Create Config File` for a starter.
+Repository context is read in place: ADRs default to `docs/adr`, and reviewer
+ownership comes from the first existing standard CODEOWNERS location
+(`.github/CODEOWNERS`, `CODEOWNERS`, or `docs/CODEOWNERS`). Donna does not
+create or modify those files. Optional `contextDirectory` in the workspace
+context settings points to a separate directory for ADRs and test expectations.
 
 ### Model provider
 

@@ -1,7 +1,7 @@
-import * as path from 'node:path';
 import * as vscode from 'vscode';
 
 import { assess } from './assess/scorecard';
+import { parseRawConfig, WORKSPACE_CONTEXT_KEY, type RawConfig } from './core/config';
 import { prepareAssessment, type PreparedAssessment } from './core/workspace';
 import type { Scorecard } from './core/types';
 import { runImpactPass } from './agents/impact';
@@ -52,15 +52,13 @@ export class AssessmentController {
       log.info(`Assessing: ${request.reason}`);
 
       const config = vscode.workspace.getConfiguration('donna');
-      const packSetting = config.get<string>('contextPack', '').trim();
-      const packDir = packSetting
-        ? path.isAbsolute(packSetting)
-          ? packSetting
-          : path.resolve(repoRoot, packSetting)
+      const storedContext = context.workspaceState.get<RawConfig | undefined>(WORKSPACE_CONTEXT_KEY);
+      const rawConfig = storedContext
+        ? parseRawConfig(JSON.stringify(storedContext))
         : undefined;
       const baseRef = config.get<string>('baseRef', '').trim() || undefined;
 
-      const prepared = prepareAssessment({ repoRoot, packDir, baseRef });
+      const prepared = prepareAssessment({ repoRoot, rawConfig, baseRef });
       this.prepared = prepared;
 
       prepared.input.config.accepted = [

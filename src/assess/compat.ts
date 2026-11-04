@@ -376,8 +376,8 @@ export function analyzeCompat(input: AssessmentInput): CompatAnalysis {
       detail:
         config.compat.length > 0
           ? `None of the changed files match a declared contract surface, and no public symbol was removed from a module that others import.`
-          : `No compatibility rules exist in donna.json, so this dimension checked only public-symbol removals from the dependency graph. Declaring contract surfaces would make this meaningful.`,
-      evidence: [{ kind: 'compat-policy', ref: 'donna.json', note: `${config.compat.length} rules configured` }],
+          : `No compatibility rules are configured in Donna's workspace context, so this dimension checked only public-symbol removals from the dependency graph. Adding contract surfaces to Donna's workspace context would make this more specific.`,
+      evidence: [{ kind: 'compat-policy', ref: 'Donna workspace context', note: `${config.compat.length} rules configured` }],
       source: 'static',
       requiredActions:
         config.compat.length > 0 ? [] : ['Declare your public contract surfaces so this check can do real work.'],

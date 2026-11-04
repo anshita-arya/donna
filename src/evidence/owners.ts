@@ -1,20 +1,12 @@
 /**
  * Ownership resolution.
  *
- * Two sources, and the order matters. Explicit ownership records in
- * `donna.json` win over CODEOWNERS, because CODEOWNERS answers "who must
- * approve this file" while an ownership record answers "which team owns this
- * component" — and for routing a design question, the second is the better
- * answer. Both are reported as evidence so the developer can see which one
- * produced a name.
- *
- * The agent never assigns ownership. If neither source covers a changed path,
- * that is surfaced as a missing-ownership escalation rather than guessed from
- * git history, which would silently nominate whoever last touched the file.
+ * CODEOWNERS is the single source of truth for file ownership. Donna reads it
+ * without changing it and never guesses ownership from git history.
  */
 
 import { matchGlob } from '../core/glob';
-import type { Evidence, DonnaConfig } from '../core/types';
+import type { Evidence } from '../core/types';
 
 export interface OwnerRule {
   /** The original pattern, for evidence. */
@@ -22,7 +14,7 @@ export interface OwnerRule {
   glob: string;
   owners: string[];
   team?: string;
-  source: 'codeowners' | 'record' | 'service';
+  source: 'codeowners';
   /** 1-based line in the source file, when known. */
   line?: number;
   sourcePath: string;
@@ -87,44 +79,12 @@ export interface OwnerLookup {
 }
 
 export class OwnershipIndex {
-  private readonly recordRules: OwnerRule[] = [];
   private readonly codeownerRules: OwnerRule[] = [];
-  private readonly serviceRules: OwnerRule[] = [];
   private readonly cache = new Map<string, OwnerLookup>();
 
-  constructor(
-    config: DonnaConfig,
-    codeownersText: string | undefined,
-  ) {
-    for (const record of config.ownership.records) {
-      for (const glob of record.match) {
-        this.recordRules.push({
-          pattern: glob,
-          glob,
-          owners: record.owners,
-          team: record.team,
-          source: 'record',
-          sourcePath: 'donna.json',
-        });
-      }
-    }
-
-    for (const service of config.services) {
-      if (!service.owners?.length) continue;
-      for (const glob of service.match) {
-        this.serviceRules.push({
-          pattern: glob,
-          glob,
-          owners: service.owners,
-          team: service.name,
-          source: 'service',
-          sourcePath: 'donna.json',
-        });
-      }
-    }
-
-    if (codeownersText && config.ownership.codeowners) {
-      this.codeownerRules.push(...parseCodeowners(config.ownership.codeowners, codeownersText));
+  constructor(codeownersText: string | undefined, codeownersPath = 'CODEOWNERS') {
+    if (codeownersText) {
+      this.codeownerRules.push(...parseCodeowners(codeownersPath, codeownersText));
     }
   }
 
@@ -142,27 +102,19 @@ export class OwnershipIndex {
   }
 
   private resolve(path: string): OwnerLookup {
-    for (const bucket of [this.recordRules, this.serviceRules, this.codeownerRules]) {
-      let hit: OwnerRule | null = null;
-      for (const rule of bucket) {
-        if (matchGlob(path, rule.glob)) hit = rule;
-      }
-      if (!hit) continue;
-
+    let hit: OwnerRule | null = null;
+    for (const rule of this.codeownerRules) {
+      if (matchGlob(path, rule.glob)) hit = rule;
+    }
+    if (hit) {
       return {
         owners: hit.owners,
-        team: hit.team,
         source: {
           kind: 'ownership',
           ref: hit.sourcePath,
           line: hit.line,
           excerpt: `${hit.pattern} ${hit.owners.join(' ')}`,
-          note:
-            hit.source === 'codeowners'
-              ? 'from CODEOWNERS'
-              : hit.source === 'service'
-                ? `service owner for ${hit.team}`
-                : 'from ownership records',
+          note: 'from CODEOWNERS',
         },
       };
     }
@@ -180,8 +132,6 @@ export class OwnershipIndex {
   }
 
   get hasAnyRules(): boolean {
-    return (
-      this.recordRules.length + this.codeownerRules.length + this.serviceRules.length > 0
-    );
+    return this.codeownerRules.length > 0;
   }
 }

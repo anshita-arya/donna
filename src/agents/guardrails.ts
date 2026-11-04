@@ -16,9 +16,6 @@
  *    against.
  *  - **Ownership records.** An agent that can edit CODEOWNERS can route its own
  *    work to a reviewer who will not object.
- *  - **Its own config.** Editing `donna.json` lets the agent widen a
- *    service boundary, drop a compatibility rule, or mark a finding accepted,
- *    and so make its own report green.
  *  - **Test expectations and CI config.** Overriding a required test is
  *    indistinguishable from passing it.
  *  - **Applying anything at all.** Even for ordinary source files, the agent
@@ -78,9 +75,6 @@ const ALWAYS_FORBIDDEN = [
   '**/CODEOWNERS',
   '.github/CODEOWNERS',
   'docs/CODEOWNERS',
-  'donna.json',
-  '.donna.json',
-  '**/donna.json',
   '.github/workflows/**',
   '.gitlab-ci.yml',
   'Jenkinsfile',
@@ -97,8 +91,6 @@ export function forbiddenWritePatterns(config: DonnaConfig): string[] {
   }
   for (const doc of config.designDocs) patterns.push(doc);
   if (config.tests.expectations) patterns.push(config.tests.expectations);
-  if (config.ownership.codeowners) patterns.push(config.ownership.codeowners);
-
   return patterns;
 }
 
@@ -159,9 +151,6 @@ function describeProtection(path: string, config: DonnaConfig): string {
   }
   if (matchAny(path, ['**/CODEOWNERS'])) {
     return 'This is an ownership record. The agent does not assign or change ownership.';
-  }
-  if (matchAny(path, ['**/donna.json', 'donna.json', '.donna.json'])) {
-    return 'This is the agent\'s own configuration. Letting it edit this would let it widen a boundary or mute a finding to make its own report green.';
   }
   if (config.tests.expectations && matchAny(path, [config.tests.expectations])) {
     return 'This declares required tests. The agent does not override test requirements.';

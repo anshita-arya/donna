@@ -33,14 +33,17 @@ Open **two** VS Code windows:
 - **Window B** — the Extension Development Host that appears. Open
   `donna/demo/sandbox` as its folder.
 
-In Window B, set two settings (`.vscode/settings.json` in the sandbox):
+In Window B, set the model trigger in `.vscode/settings.json`:
 
 ```json
 {
-  "donna.contextPack": "../../context-pack",
   "donna.llm.trigger": "onConflict"
 }
 ```
+
+Run **Donna: Load Synthetic Demo Context** to load the clearly labeled demo
+service map and policies into VS Code workspace storage. The context stays
+outside the sandbox repository.
 
 Make the sandbox a git repo with a clean baseline, so the diff is real:
 

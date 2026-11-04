@@ -90,7 +90,7 @@ function formatServices(config: DonnaConfig): string {
   return config.services
     .map(
       (service) =>
-        `- ${service.name}: ${service.description ?? 'no description'} | paths: ${service.match.join(', ')} | owners: ${service.owners?.join(', ') || 'unrecorded'} | may depend on: ${service.dependsOn ? service.dependsOn.join(', ') || '(nothing)' : '(unconstrained)'}`,
+        `- ${service.name}: ${service.description ?? 'no description'} | paths: ${service.match.join(', ')} | may depend on: ${service.dependsOn ? service.dependsOn.join(', ') || '(nothing)' : '(unconstrained)'}`,
     )
     .join('\n');
 }
@@ -219,8 +219,8 @@ applied without the developer explicitly choosing to.
 
 Hard limits, enforced outside your control and not negotiable:
   - You may not edit architecture decision records, design documentation,
-    ownership records (CODEOWNERS), the tool's own configuration, test
-    expectation files, or CI configuration. Edits to those paths are rejected
+    CODEOWNERS, test expectation files, or CI configuration. Edits to those
+    paths are rejected
     before the developer ever sees them. If the right answer is to change a
     decision, say so in openQuestions and route it to the owners — do not
     attempt the edit.

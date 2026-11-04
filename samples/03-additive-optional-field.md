@@ -15,7 +15,7 @@ No conflicts and no unchecked constraints. 1 item needs a sentence in the PR des
 | Blast radius | ✓ pass | Clear. 1 check passed. Dependents traversed upward from the changed modules. |
 | Production risk | ✓ pass | Clear. 1 check passed. Heuristic signals, so a clear result means nothing obvious rather than no risk. |
 | Test coverage | ! attention | Worth a look. 1 to note. Tests that import the changed modules, plus declared expectations. |
-| Review routing | ✓ pass | Clear. 1 check passed. From ownership records and CODEOWNERS; never inferred from git history. |
+| Review routing | ✓ pass | Clear. 1 check passed. From CODEOWNERS and ADR owner metadata; never inferred from git history. |
 
 ## What this did not check
 
@@ -66,7 +66,7 @@ No conflicts and no unchecked constraints. 1 item needs a sentence in the PR des
 
 - Does not modify code. Every suggested change is a proposal for you to review.
 - Does not create, edit or supersede architecture decision records or design docs.
-- Does not assign or change ownership. Owners shown are read from ownership records.
+- Does not assign or change ownership. Owners shown are read from CODEOWNERS and ADR owner metadata.
 - Does not approve, open, or merge a pull request, and does not deploy.
 - Does not override required tests or review policy.
 - Escalates to human design review instead of resolving a design conflict itself.
