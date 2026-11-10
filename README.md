@@ -1,6 +1,9 @@
 # Donna
 
+TL/DR: For all Suits fan, she's the Donna to your Harvey.
+
 🕶️ Meet Donna: The Background Design Review Agent
+
 
 Most AI coding assistants are just execution engines. For all Suits fans, they are the legal secretaries of the software world—they type exactly what you dictate, even if you are dictating a mistake.
 Donna is different. She isn’t the assistant you hire to type; she’s the partner you need to stay ahead.
