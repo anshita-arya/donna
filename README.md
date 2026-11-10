@@ -13,6 +13,28 @@ So how exactly does Donna do this?
 A VS Code extension that runs **in parallel to your coding agent** and assesses
 the system-wide impact of its change **before you open a pull request**.
 
+## Installation
+
+You can install this extension manually using the generated `.vsix` package:
+
+### Option 1: Via VS Code UI
+1. Download the latest `.vsix` file from the [Releases](https://github.com) page.
+2. Open **Visual Studio Code**.
+3. Go to the **Extensions** view (`Ctrl+Shift+X` or `Cmd+Shift+X`).
+4. Click on the **...** (Views and More Actions) menu at the top of the Extensions pane.
+5. Select **Install from VSIX...** and choose the downloaded file.
+
+### Option 2: Via Command Line
+Run the following command in your terminal:
+
+```bash
+# For standard VS Code
+code --install-extension path/to/your-extension.vsix
+
+# For VS Code Insiders
+code-insiders --install-extension path/to/your-extension.vsix
+```
+
 The coding agent writes the code. Donna does the background investigation
 you would otherwise do manually afterwards:
 1. Which services and dependencies the change reaches
@@ -32,20 +54,22 @@ It produces a reviewable scorecard. It does not change or approve anything on yo
 
 ## The problem it addresses
 
-A coding assistant finishes a change. The diff looks fine. The code builds. The tests pass. The developer opens a PR, and then finds out that the change conflicts with an
+A coding assistant finishes a change -> The diff looks fine -> The code builds -> The tests pass -> The developer opens a PR, and then finds out that the change conflicts with an
 architecture decision written eight months ago by someone on another team, or
 that the "additive" field they added is required and breaks every existing
-client, or that the redundant-looking check they removed was the only thing
+service, or that the redundant-looking check they removed was the only thing
 standing between a malformed request and the scheduler.
 
 That evidence exists. It is just spread across service repositories, dependency
 relationships, design documentation, CODEOWNERS files and test suites — and
-none of it is visible in the diff. So the conflict surfaces in PR review, or in
+none of it is visible in the diff.  So the conflict surfaces in PR review, or in
 a lead's end-of-week read of the codebase, which is the most expensive possible
 moment: the change gets sent back for design review, and sometimes rewritten or
 abandoned.
 
-Donna moves that discovery to before the PR exists.
+Donna moves that discovery from PR to day 1.
+
+## The Design Decisions behind Donna
 
 ## What it actually checks
 
