@@ -1,11 +1,10 @@
 import * as fs from 'node:fs';
-import * as path from 'node:path';
 import * as vscode from 'vscode';
 
 import type { Scorecard } from './core/types';
 import { connectIntegrations } from './integrations/mcp';
 import { runDesignReview } from './agents/designReview';
-import { validateEditAgainstFile } from './agents/guardrails';
+import { resolveEditTarget, validateEditAgainstFile } from './agents/guardrails';
 import { ModelUnavailableError } from './agents/model';
 import { DiagnosticsPublisher } from './ui/diagnostics';
 import { ScorecardPanel } from './ui/scorecardPanel';
@@ -239,7 +238,20 @@ export function activate(context: vscode.ExtensionContext): void {
     const edit = controller.proposedEdits[index];
     if (!edit) return;
 
-    const abs = path.resolve(repoRoot, edit.file);
+    // Re-check at apply time rather than trusting the review: a symlink can
+    // change between the two, and the write must land where the check looked.
+    const config = controller.prepared?.input.config;
+    if (!config) {
+      void vscode.window.showWarningMessage('Donna: re-run the assessment before applying a proposed edit.');
+      return;
+    }
+    const target = resolveEditTarget(edit.file, config);
+    if (!target.ok) {
+      void vscode.window.showErrorMessage(`Donna: refused to apply the edit to ${edit.file}. ${target.detail}`);
+      log.warn(`Refused proposed edit to ${edit.file}: ${target.rule}`);
+      return;
+    }
+    const abs = target.abs;
     let current: string;
     try {
       current = fs.readFileSync(abs, 'utf8');

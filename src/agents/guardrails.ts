@@ -22,6 +22,9 @@
  *    produces a change *request*. The developer applies it.
  */
 
+import * as fs from 'fs';
+import * as path from 'path';
+
 import { matchAny } from '../core/glob';
 import type { DonnaConfig } from '../core/types';
 
@@ -110,23 +113,9 @@ export function checkChangeRequest(
   const violations: GuardrailViolation[] = [];
 
   for (const edit of request.edits) {
-    const normalized = edit.file.replace(/^\.?\//, '');
-
-    if (matchAny(normalized, forbidden)) {
-      violations.push({
-        path: edit.file,
-        rule: 'protected-path',
-        detail: describeProtection(normalized, config),
-      });
-      continue;
-    }
-
-    if (normalized.includes('..')) {
-      violations.push({
-        path: edit.file,
-        rule: 'path-escape',
-        detail: 'The path escapes the repository root, so it was rejected outright.',
-      });
+    const target = resolveEditTarget(edit.file, config, forbidden);
+    if (!target.ok) {
+      violations.push({ path: edit.file, rule: target.rule, detail: target.detail });
       continue;
     }
 
@@ -139,26 +128,101 @@ export function checkChangeRequest(
       continue;
     }
 
-    allowed.push(edit);
+    // Carry the canonical path forward, so the file that is read, verified and
+    // written is exactly the one that was checked.
+    allowed.push({ ...edit, file: target.rel });
   }
 
   return { allowed, violations };
 }
 
-function describeProtection(path: string, config: DonnaConfig): string {
-  if (config.adrDir && matchAny(path, [`${config.adrDir.replace(/\/$/, '')}/**`])) {
+export type EditTarget =
+  | { ok: true; rel: string; abs: string }
+  | { ok: false; rule: 'path-escape' | 'protected-path'; detail: string };
+
+/**
+ * Resolves a model-supplied path to the file an edit would actually write.
+ *
+ * The protected-path check is only as good as the path it is given. Matching
+ * the raw string lets `docs//adr/x.md`, `./docs/./adr/x.md`, `Docs/ADR/x.md`
+ * on a case-insensitive file system, or a symlink into `docs/adr` all reach an
+ * ADR, because the file system normalizes what the glob did not. So the path
+ * is normalized first, protection is checked case-insensitively, and the check
+ * is repeated on the path after symlinks are followed.
+ */
+export function resolveEditTarget(
+  file: string,
+  config: DonnaConfig,
+  forbidden: string[] = forbiddenWritePatterns(config),
+): EditTarget {
+  const escape = (detail: string): EditTarget => ({ ok: false, rule: 'path-escape', detail });
+
+  const posix = file.replace(/\\/g, '/');
+  if (!posix.trim() || posix.includes('\0')) return escape('The path is empty or malformed, so it was rejected outright.');
+  if (posix.startsWith('/') || /^[a-zA-Z]:/.test(posix)) {
+    return escape('The path is absolute rather than relative to the repository, so it was rejected outright.');
+  }
+
+  const rel = path.posix.normalize(posix).replace(/\/$/, '');
+  if (rel === '.' || rel === '..' || rel.startsWith('../')) {
+    return escape('The path escapes the repository root, so it was rejected outright.');
+  }
+  if (isProtected(rel, forbidden)) {
+    return { ok: false, rule: 'protected-path', detail: describeProtection(rel, config) };
+  }
+
+  const abs = path.resolve(config.repoRoot, rel);
+  const realRel = path.relative(realPathOf(config.repoRoot), realPathOf(abs)).split(path.sep).join('/');
+  if (realRel === '..' || realRel.startsWith('../') || path.isAbsolute(realRel)) {
+    return escape('The path leads outside the repository through a symbolic link, so it was rejected outright.');
+  }
+  if (isProtected(realRel, forbidden)) {
+    return { ok: false, rule: 'protected-path', detail: describeProtection(realRel, config) };
+  }
+
+  return { ok: true, rel, abs };
+}
+
+/** Case-insensitive, because macOS and Windows treat `Docs/ADR` as `docs/adr`. */
+function isProtected(rel: string, patterns: string[]): boolean {
+  return matchAny(rel.toLowerCase(), patterns.map((p) => p.toLowerCase()));
+}
+
+/**
+ * Follows symlinks on the longest prefix that exists. The edited file itself
+ * may not exist yet, but a symlinked directory above it still decides where
+ * the write lands.
+ */
+function realPathOf(abs: string): string {
+  const missing: string[] = [];
+  let current = abs;
+  for (;;) {
+    try {
+      return path.join(fs.realpathSync(current), ...missing.reverse());
+    } catch {
+      const parent = path.dirname(current);
+      if (parent === current) return abs;
+      missing.push(path.basename(current));
+      current = parent;
+    }
+  }
+}
+
+function describeProtection(rel: string, config: DonnaConfig): string {
+  const matches = (patterns: string[]) => isProtected(rel, patterns);
+  if (config.adrDir && matches([`${config.adrDir.replace(/\/$/, '')}/**`])) {
     return 'This is an architecture decision record. The agent is not allowed to change the decisions it is measuring the change against — that has to go through the ADR owners.';
   }
-  if (matchAny(path, ['**/CODEOWNERS'])) {
+  if (matches(['**/CODEOWNERS'])) {
     return 'This is an ownership record. The agent does not assign or change ownership.';
   }
-  if (config.tests.expectations && matchAny(path, [config.tests.expectations])) {
+  if (config.tests.expectations && matches([config.tests.expectations])) {
     return 'This declares required tests. The agent does not override test requirements.';
   }
-  if (matchAny(path, ['.github/workflows/**', '.circleci/**', '.gitlab-ci.yml', 'Jenkinsfile', 'azure-pipelines.yml'])) {
+  if (matches(['.github/workflows/**', '.circleci/**', '.gitlab-ci.yml', 'Jenkinsfile', 'azure-pipelines.yml'])) {
     return 'This is CI configuration. Changing what CI enforces is equivalent to overriding it.';
   }
-  if (matchAny(path, config.designDocs)) {
+  if (matches(config.designDocs)) {
     return 'This is design documentation. The agent cites it; it does not edit it.';
   }
   return 'This path is protected from agent edits.';

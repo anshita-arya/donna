@@ -11,6 +11,10 @@
  * the right trade for a prototype, and it runs anywhere Node does.
  */
 
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+
 import { matchGlob, matchAny } from '../src/core/glob';
 import { scanPython, maskPython } from '../src/core/scan-python';
 import { PythonResolver, fileToModule } from '../src/core/resolve-python';
@@ -20,7 +24,7 @@ import { buildGraph, findCycles, blastRadius, reaches } from '../src/core/graph'
 import { codeownersPatternToGlob, parseCodeowners, OwnershipIndex } from '../src/evidence/owners';
 import { parseAdr, isActive, relevantAdrs } from '../src/evidence/adr';
 import { extractJson } from '../src/agents/model';
-import { checkChangeRequest, validateEditAgainstFile } from '../src/agents/guardrails';
+import { checkChangeRequest, resolveEditTarget, validateEditAgainstFile } from '../src/agents/guardrails';
 import { parseRawConfig, resolveConfig } from '../src/core/config';
 import { findingId } from '../src/core/id';
 import { buildSearchArguments, isReadOnlySearchTool } from '../src/integrations/tools';
@@ -564,6 +568,52 @@ group('guardrails');
     'ADR rejection explains why rather than just refusing',
     (adrViolation?.detail ?? '').includes('measuring the change against'),
   );
+
+  // Paths the file system resolves to a protected file, even though the raw
+  // string does not match the protected glob.
+  const disguised = [
+    'docs//adr/ADR-0002.md',
+    './docs/./adr/ADR-0002.md',
+    'src/../docs/adr/ADR-0002.md',
+    'Docs/ADR/ADR-0002.md',
+    '.github//workflows/ci.yml',
+    '.GITHUB/WORKFLOWS/ci.yml',
+    'docs\\adr\\ADR-0002.md',
+  ];
+  for (const file of disguised) {
+    const result = checkChangeRequest({ ...request, edits: [{ file, find: 'a', replace: 'b' }] }, config);
+    check(`disguised protected path rejected: ${file}`, result.allowed.length === 0 && result.violations[0]?.rule === 'protected-path');
+  }
+
+  for (const file of ['/etc/hosts', 'C:/Windows/system.ini', 'src/../../outside.py', '..', '.']) {
+    const result = checkChangeRequest({ ...request, edits: [{ file, find: 'a', replace: 'b' }] }, config);
+    check(`escaping path rejected: ${file}`, result.allowed.length === 0 && result.violations[0]?.rule === 'path-escape');
+  }
+
+  const dotted = checkChangeRequest({ ...request, edits: [{ file: './src/foo..bar.py', find: 'a', replace: 'b' }] }, config);
+  eq('a double dot inside a name is not an escape, and the path is canonicalized', dotted.allowed.map((e) => e.file), ['src/foo..bar.py']);
+}
+
+{
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'donna-guardrails-'));
+  try {
+    fs.mkdirSync(path.join(root, 'docs/adr'), { recursive: true });
+    fs.mkdirSync(path.join(root, 'src'));
+    fs.symlinkSync(path.join(root, 'docs/adr'), path.join(root, 'src/decisions'));
+    fs.symlinkSync(os.tmpdir(), path.join(root, 'src/elsewhere'));
+    const config = resolveConfig({ adrDir: 'docs/adr', services: [] }, root);
+
+    const viaLink = resolveEditTarget('src/decisions/ADR-0002.md', config);
+    check('symlink into the ADR directory rejected', !viaLink.ok && viaLink.rule === 'protected-path');
+
+    const outside = resolveEditTarget('src/elsewhere/x.py', config);
+    check('symlink out of the repository rejected', !outside.ok && outside.rule === 'path-escape');
+
+    const plain = resolveEditTarget('src/new_module.py', config);
+    check('ordinary new file allowed', plain.ok && plain.abs === path.join(root, 'src/new_module.py'));
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 }
 
 {
