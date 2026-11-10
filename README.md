@@ -18,7 +18,7 @@ the system-wide impact of its change **before you open a pull request**.
 You can install this extension manually using the generated `.vsix` package:
 
 ### Option 1: Via VS Code UI
-1. Download the latest `.vsix` file from the [Releases](https://github.com) page.
+1. Download the latest `.vsix` file from the [Donna VSIX]([https://github.com](https://github.com/anshita-arya/donna/blob/691e56105f1104f6d2f381c5944d599d4701853c/donna-0.1.0.vsix)) page.
 2. Open **Visual Studio Code**.
 3. Go to the **Extensions** view (`Ctrl+Shift+X` or `Cmd+Shift+X`).
 4. Click on the **...** (Views and More Actions) menu at the top of the Extensions pane.
@@ -29,10 +29,10 @@ Run the following command in your terminal:
 
 ```bash
 # For standard VS Code
-code --install-extension path/to/your-extension.vsix
+code --install-extension path/to/donna-0.1.0.vsix
 
 # For VS Code Insiders
-code-insiders --install-extension path/to/your-extension.vsix
+code-insiders --install-extension path/to/donna-0.1.0.vsix
 ```
 
 The coding agent writes the code. Donna does the background investigation
