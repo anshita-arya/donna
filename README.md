@@ -11,7 +11,7 @@ While your primary coding agent is hyper-focused on hammering out syntax and shi
 
 So how exactly does Donna do this? 
 A VS Code extension that runs **in parallel to your coding agent** and assesses
-the system-wide impact of its change **before you open a pull request**.
+the system-wide impact of its change, while you are still working on it ** way before you open a pull request**.
 
 ## Installation
 
